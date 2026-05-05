@@ -255,6 +255,17 @@ async def _handle_callback(ctx: BotContext, update: dict) -> None:
             await admin_h.set_status(ctx, user_id, ticket_id, status)
             return
 
+        if payload == kb.CB_ADMIN_USERS:
+            await admin_h.show_users(ctx, user_id, callback_id=callback_id)
+            return
+
+        if payload.startswith(kb.CB_ADMIN_USERS_PAGE):
+            page = _safe_int(payload[len(kb.CB_ADMIN_USERS_PAGE):])
+            await admin_h.show_users(
+                ctx, user_id, callback_id=callback_id, page=page or 0
+            )
+            return
+
     if not await _has_accepted_docs(ctx, user_id):
         await user_h.show_consent(ctx, user_id, callback_id=callback_id)
         return

@@ -48,6 +48,8 @@ CB_ADMIN_PAGE = "admin:page:"
 CB_ADMIN_STATUS = "admin:status:"
 CB_ADMIN_REPLY = "admin:reply:"
 CB_ADMIN_BACK = "admin:back"
+CB_ADMIN_USERS = "admin:users"
+CB_ADMIN_USERS_PAGE = "admin:users_page:"
 
 
 def _btn(text: str, payload: str) -> dict:
@@ -225,6 +227,7 @@ def admin_folders(active_count: int = 0, archive_count: int = 0) -> list[dict]:
         [
             [_btn(f"📂 Активные: {active_count}", CB_ADMIN_ACTIVE)],
             [_btn(f"🗄 Архив: {archive_count}", CB_ADMIN_ARCHIVE)],
+            [_btn("👥 Пользователи", CB_ADMIN_USERS)],
             [_btn("🏠 Меню", CB_BACK_MAIN)],
         ]
     )
@@ -245,6 +248,21 @@ def admin_tickets_list(
     nav.append(_btn(f"{page + 1}/{total_pages}", f"{CB_ADMIN_LIST_PAGE}{kind}:{page}"))
     if page + 1 < total_pages:
         nav.append(_btn("➡️", f"{CB_ADMIN_LIST_PAGE}{kind}:{page + 1}"))
+    if total_pages > 1:
+        rows.append(nav)
+    rows.append([_btn("⬅️ Назад к папкам", CB_ADMIN_BACK)])
+    rows.append([_btn("🏠 Меню", CB_BACK_MAIN)])
+    return _kb(rows)
+
+
+def admin_users_list(page: int = 0, total_pages: int = 1) -> list[dict]:
+    rows: list[list[dict]] = []
+    nav: list[dict] = []
+    if page > 0:
+        nav.append(_btn("⬅️", f"{CB_ADMIN_USERS_PAGE}{page - 1}"))
+    nav.append(_btn(f"{page + 1}/{total_pages}", f"{CB_ADMIN_USERS_PAGE}{page}"))
+    if page + 1 < total_pages:
+        nav.append(_btn("➡️", f"{CB_ADMIN_USERS_PAGE}{page + 1}"))
     if total_pages > 1:
         rows.append(nav)
     rows.append([_btn("⬅️ Назад к папкам", CB_ADMIN_BACK)])

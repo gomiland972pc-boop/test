@@ -116,7 +116,7 @@ TICKET_STATUS_CHANGED = (
 
 ADMIN_NEW_TICKET = (
     "🆕 *Новый тикет #{ticket_id}*\n"
-    "👤 От: {user_name} (id {user_id})\n\n"
+    "👤 От: {user_name} ([профиль](https://max.ru/id{user_id}))\n\n"
     "💬 {subject}"
 )
 
@@ -134,6 +134,9 @@ ADMIN_ASK_REPLY = (
 ADMIN_REPLY_SENT = "📤 Ответ отправлен пользователю тикета *#{ticket_id}*."
 USER_ADMIN_REPLY = "💬 *Ответ поддержки по тикету #{ticket_id}:*\n\n{text}"
 
+
+ADMIN_USERS_HEADER = "👥 *Список пользователей:*\n\n{users}"
+ADMIN_USERS_EMPTY = "📭 Зарегистрированных пользователей нет."
 
 ERROR_GENERIC = "⚠️ Произошла ошибка. Попробуйте позже."
 NOT_ADMIN = "🚫 Команда доступна только администратору."

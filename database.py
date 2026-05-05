@@ -347,6 +347,26 @@ class Database:
         rows = await cur.fetchall()
         return [dict(r) for r in rows]
 
+    async def list_users(self, limit: int = 50, offset: int = 0) -> list[UserProfile]:
+        cur = await self.conn.execute(
+            "SELECT * FROM users ORDER BY created_at ASC LIMIT ? OFFSET ?",
+            (limit, offset),
+        )
+        rows = await cur.fetchall()
+        result: list[UserProfile] = []
+        for row in rows:
+            d = {k: row[k] for k in row.keys()}
+            d["is_premium"] = bool(d.get("is_premium", 0))
+            d["consent_accepted"] = bool(d.get("consent_accepted", 0))
+            d["offer_accepted"] = bool(d.get("offer_accepted", 0))
+            result.append(UserProfile(**d))
+        return result
+
+    async def count_users(self) -> int:
+        cur = await self.conn.execute("SELECT COUNT(*) AS count FROM users")
+        row = await cur.fetchone()
+        return int(row["count"]) if row else 0
+
     async def find_open_ticket_by_user(self, user_id: int) -> Optional[Ticket]:
         cur = await self.conn.execute(
             """

@@ -58,7 +58,7 @@ async def build_admin_ticket_history(ctx: BotContext, ticket: Ticket) -> str:
     messages = await ctx.db.get_last_messages(ticket.id)
     lines = [
         f"🎫 _Тикет_ #{ticket.id}",
-        f"👤 user_id: {ticket.user_id}",
+        f"👤 [профиль](https://max.ru/id{ticket.user_id}) (id {ticket.user_id})",
         f"📌 Статус: {STATUS_LABELS.get(ticket.status, ticket.status)}",
         f"� Создан: {format_ticket_date(ticket.created_at)}",
         f"�🕘 Обновлён: {format_ticket_date(ticket.updated_at)}",

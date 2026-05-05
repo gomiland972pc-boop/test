@@ -312,7 +312,7 @@ async def reply_to_ticket(
                 text=(
                     f"💬 *Сообщение по тикету #{ticket.id}* "
                     f"(статус: {STATUS_LABELS.get(ticket.status, ticket.status)})\n\n"
-                    f"👤 id {user_id}: {text}"
+                    f"👤 [профиль](https://max.ru/id{user_id}) (id {user_id}): {text}"
                 ),
                 attachments=kb.admin_new_ticket(ticket.id),
                 fmt="markdown",
@@ -337,7 +337,7 @@ async def append_to_open_ticket(
                 text=(
                     f"💬 *Сообщение по тикету #{ticket.id}* "
                     f"(статус: {STATUS_LABELS.get(ticket.status, ticket.status)})\n\n"
-                    f"👤 id {user_id}: {text}"
+                    f"👤 [профиль](https://max.ru/id{user_id}) (id {user_id}): {text}"
                 ),
                 attachments=kb.admin_new_ticket(ticket.id),
                 fmt="markdown",

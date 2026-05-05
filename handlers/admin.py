@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 import keyboards as kb
+import pytz
 import texts
 from database import STATUS_LABELS
 from handlers.context import BotContext
@@ -11,6 +13,9 @@ from ticket_utils import send_ticket_history
 
 logger = logging.getLogger(__name__)
 TICKETS_PER_PAGE = 5
+USERS_PER_PAGE = 10
+
+MSK = pytz.timezone("Europe/Moscow")
 
 
 def _is_admin(ctx: BotContext, user_id: int) -> bool:
@@ -124,6 +129,53 @@ async def set_status(
         )
     except Exception as exc:
         logger.exception("Не удалось уведомить пользователя о статусе: %s", exc)
+
+
+async def show_users(
+    ctx: BotContext,
+    admin_id: int,
+    callback_id: str = "",
+    page: int = 0,
+) -> None:
+    if not _is_admin(ctx, admin_id):
+        await ctx.api.send_message(user_id=admin_id, text=texts.NOT_ADMIN)
+        return
+
+    total = await ctx.db.count_users()
+    total_pages = max(1, (total + USERS_PER_PAGE - 1) // USERS_PER_PAGE)
+    page = max(0, min(page, total_pages - 1))
+    users = await ctx.db.list_users(
+        limit=USERS_PER_PAGE, offset=page * USERS_PER_PAGE
+    )
+
+    if not users:
+        await ctx.reply_menu(
+            user_id=admin_id,
+            text=texts.ADMIN_USERS_EMPTY,
+            attachments=kb.admin_users_list(page, total_pages),
+            callback_id=callback_id,
+        )
+        return
+
+    lines: list[str] = []
+    for u in users:
+        nick = f"@{u.username}" if u.username else "—"
+        try:
+            dt = datetime.fromisoformat(u.created_at)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.astimezone(MSK)
+            date_str = dt.strftime("%d.%m.%Y %H:%M") + " MSK"
+        except (ValueError, TypeError):
+            date_str = u.created_at[:16]
+        lines.append(f"{u.user_id} | {nick} | {date_str}")
+
+    await ctx.reply_menu(
+        user_id=admin_id,
+        text=texts.ADMIN_USERS_HEADER.format(users="\n".join(lines)),
+        attachments=kb.admin_users_list(page, total_pages),
+        callback_id=callback_id,
+    )
 
 
 async def ask_reply(ctx: BotContext, admin_id: int, ticket_id: int) -> None:
