@@ -46,6 +46,20 @@ def _extract_chat_id(obj: dict) -> Optional[int]:
     return None
 
 
+def _is_bot(obj: dict) -> bool:
+    if obj.get("is_bot"):
+        return True
+    uname = obj.get("username") or ""
+    return isinstance(uname, str) and uname.endswith("_bot")
+
+
+def _safe_username(obj: dict) -> Optional[str]:
+    if _is_bot(obj):
+        return None
+    uname = obj.get("username")
+    return uname if isinstance(uname, str) and uname else None
+
+
 async def _has_accepted_docs(ctx: BotContext, user_id: int) -> bool:
     profile = await ctx.db.get_user(user_id)
     return bool(profile and profile.consent_accepted and profile.offer_accepted)
@@ -78,8 +92,8 @@ async def _handle_message(ctx: BotContext, update: dict) -> None:
             logger.debug("Update без user_id: %s", update)
             return
 
-    user_name = sender.get("name") or sender.get("username") or ""
-    username = sender.get("username")
+    user_name = sender.get("name") or _safe_username(sender) or ""
+    username = _safe_username(sender)
     await ctx.db.upsert_user(
         user_id=user_id, name=user_name, username=username, chat_id=chat_id
     )
@@ -163,8 +177,8 @@ async def _handle_callback(ctx: BotContext, update: dict) -> None:
     recipient = _extract_recipient(msg)
     await ctx.db.upsert_user(
         user_id=user_id,
-        name=user.get("name") or sender.get("name") or sender.get("username") or "",
-        username=user.get("username") or sender.get("username"),
+        name=user.get("name") or _safe_username(user) or "",
+        username=_safe_username(user),
         chat_id=_extract_chat_id(recipient),
     )
 

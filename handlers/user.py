@@ -299,6 +299,8 @@ async def reply_to_ticket(
     await ctx.db.add_message(ticket.id, "user", text)
     ctx.states.set(user_id, State.MAIN_MENU)
     updated = await ctx.db.get_ticket(ticket.id)
+    profile = await ctx.db.get_user(user_id)
+    user_name = profile.name if profile and profile.name else "—"
     await send_ticket_history(
         ctx,
         user_id,
@@ -312,7 +314,7 @@ async def reply_to_ticket(
                 text=(
                     f"💬 *Сообщение по тикету #{ticket.id}* "
                     f"(статус: {STATUS_LABELS.get(ticket.status, ticket.status)})\n\n"
-                    f"👤 [профиль](https://max.ru/id{user_id}) (id {user_id}): {text}"
+                    f"👤 {user_name} (id {user_id}): {text}"
                 ),
                 attachments=kb.admin_new_ticket(ticket.id),
                 fmt="markdown",
@@ -330,6 +332,8 @@ async def append_to_open_ticket(
     if ticket is None:
         return False
     await ctx.db.add_message(ticket.id, "user", text)
+    profile = await ctx.db.get_user(user_id)
+    user_name = profile.name if profile and profile.name else "—"
     for admin_id in ctx.cfg.admin_ids:
         try:
             await ctx.api.send_message(
@@ -337,7 +341,7 @@ async def append_to_open_ticket(
                 text=(
                     f"💬 *Сообщение по тикету #{ticket.id}* "
                     f"(статус: {STATUS_LABELS.get(ticket.status, ticket.status)})\n\n"
-                    f"👤 [профиль](https://max.ru/id{user_id}) (id {user_id}): {text}"
+                    f"👤 {user_name} (id {user_id}): {text}"
                 ),
                 attachments=kb.admin_new_ticket(ticket.id),
                 fmt="markdown",

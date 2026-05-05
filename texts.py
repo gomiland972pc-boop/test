@@ -116,7 +116,7 @@ TICKET_STATUS_CHANGED = (
 
 ADMIN_NEW_TICKET = (
     "🆕 *Новый тикет #{ticket_id}*\n"
-    "👤 От: {user_name} ([профиль](https://max.ru/id{user_id}))\n\n"
+    "👤 От: {user_name} (id {user_id})\n\n"
     "💬 {subject}"
 )
 
