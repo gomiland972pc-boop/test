@@ -12,6 +12,31 @@ from states import State
 
 logger = logging.getLogger(__name__)
 
+_SEEN_MID: set[str] = set()
+_SEEN_MAX = 500
+
+
+def _is_duplicate_mid(mid: Optional[str]) -> bool:
+    if not mid:
+        return False
+    if mid in _SEEN_MID:
+        return True
+    if len(_SEEN_MID) >= _SEEN_MAX:
+        _SEEN_MID.clear()
+    _SEEN_MID.add(mid)
+    return False
+
+
+def _extract_mid(msg: dict) -> Optional[str]:
+    body = msg.get("body") or {}
+    mid = body.get("mid") or msg.get("mid")
+    return str(mid) if mid else None
+
+
+def _extract_chat_type(msg: dict) -> str:
+    recipient = msg.get("recipient") or msg.get("chat") or {}
+    return (recipient.get("chat_type") or "").strip().lower()
+
 
 def _extract_message(update: dict) -> Optional[dict]:
     return update.get("message") or update.get("new_message")
@@ -28,6 +53,14 @@ def _extract_recipient(msg: dict) -> dict:
 def _extract_text(msg: dict) -> str:
     body = msg.get("body") or {}
     return (body.get("text") or msg.get("text") or "").strip()
+
+
+def _extract_attachments(msg: dict) -> Optional[list[dict]]:
+    body = msg.get("body") or {}
+    atts = body.get("attachments") or msg.get("attachments")
+    if isinstance(atts, list) and atts:
+        return [a for a in atts if isinstance(a, dict)]
+    return None
 
 
 def _extract_user_id(obj: dict) -> Optional[int]:
@@ -80,11 +113,24 @@ async def dispatch(ctx: BotContext, update: dict) -> None:
 
 async def _handle_message(ctx: BotContext, update: dict) -> None:
     msg = _extract_message(update) or {}
+    upd_type = update.get("update_type") or update.get("type") or ""
+
+    mid = _extract_mid(msg)
+    if _is_duplicate_mid(mid):
+        logger.debug("Пропуск дубликата по mid=%s", mid)
+        return
+
+    chat_type = _extract_chat_type(msg)
+    if upd_type != "bot_started" and chat_type and chat_type != "dialog":
+        logger.debug("Пропуск сообщения из %s (бот работает только 1-на-1)", chat_type)
+        return
+
     sender = _extract_sender(msg)
     recipient = _extract_recipient(msg)
     user_id = _extract_user_id(sender)
     chat_id = _extract_chat_id(recipient)
     text = _extract_text(msg)
+    attachments = _extract_attachments(msg)
 
     if user_id is None:
         user_id = update.get("user_id") or update.get("chat_id")
@@ -102,7 +148,7 @@ async def _handle_message(ctx: BotContext, update: dict) -> None:
         await _handle_command(ctx, user_id, chat_id, text)
         return
 
-    if (update.get("update_type") or update.get("type")) == "bot_started":
+    if upd_type == "bot_started":
         await user_h.cmd_start(ctx, user_id, chat_id)
         return
 
@@ -111,7 +157,7 @@ async def _handle_message(ctx: BotContext, update: dict) -> None:
         await user_h.show_consent(ctx, user_id, profile)
         return
 
-    if not text:
+    if not text and not attachments:
         return
 
     state, data = ctx.states.get(user_id)
@@ -119,19 +165,41 @@ async def _handle_message(ctx: BotContext, update: dict) -> None:
     if state == State.ADMIN_REPLYING and user_id in ctx.cfg.admin_ids:
         ticket_id = int(data.get("ticket_id", 0))
         if ticket_id:
-            await admin_h.send_reply(ctx, user_id, ticket_id, text)
+            await admin_h.send_reply(
+                ctx, user_id, ticket_id, text, attachments=attachments
+            )
             return
+
+    if state == State.ADMIN_WAITING_USER_ID and user_id in ctx.cfg.admin_ids:
+        await admin_h.handle_user_id_input(ctx, user_id, text)
+        return
+
+    if state == State.ADMIN_WAITING_FIRST_MESSAGE and user_id in ctx.cfg.admin_ids:
+        target_user_id = int(data.get("target_user_id", 0))
+        if target_user_id:
+            await admin_h.send_first_message(
+                ctx, user_id, target_user_id, text, attachments=attachments
+            )
+        else:
+            ctx.states.reset(user_id)
+        return
 
     if state == State.TICKET_WAITING_TEXT:
         ticket_id = int(data.get("ticket_id", 0))
         if ticket_id:
-            await user_h.reply_to_ticket(ctx, user_id, text, ticket_id)
+            await user_h.reply_to_ticket(
+                ctx, user_id, text, ticket_id, attachments=attachments
+            )
         else:
-            await user_h.create_ticket(ctx, user_id, user_name, text)
+            await user_h.create_ticket(
+                ctx, user_id, user_name, text, attachments=attachments
+            )
         return
 
     if user_id not in ctx.cfg.admin_ids:
-        if await user_h.append_to_open_ticket(ctx, user_id, text):
+        if await user_h.append_to_open_ticket(
+            ctx, user_id, text, attachments=attachments
+        ):
             return
 
     await user_h.show_main_menu(ctx, user_id)
@@ -206,6 +274,7 @@ async def _handle_callback(ctx: BotContext, update: dict) -> None:
             return
 
         if payload == kb.CB_ADMIN_BACK:
+            ctx.states.reset(user_id)
             await admin_h.cmd_admin(ctx, user_id, callback_id=callback_id)
             return
 
@@ -271,6 +340,31 @@ async def _handle_callback(ctx: BotContext, update: dict) -> None:
 
         if payload == kb.CB_ADMIN_USERS:
             await admin_h.show_users(ctx, user_id, callback_id=callback_id)
+            return
+
+        if payload == kb.CB_ADMIN_WRITE_USER:
+            await admin_h.start_write_user(ctx, user_id, callback_id=callback_id)
+            return
+
+        if payload == kb.CB_ADMIN_TEST_NICK:
+            await admin_h.show_test_nick_tickets(
+                ctx, user_id, callback_id=callback_id
+            )
+            return
+
+        if payload.startswith(kb.CB_ADMIN_TEST_NICK_PAGE):
+            page = _safe_int(payload[len(kb.CB_ADMIN_TEST_NICK_PAGE):])
+            await admin_h.show_test_nick_tickets(
+                ctx, user_id, callback_id=callback_id, page=page or 0
+            )
+            return
+
+        if payload.startswith(kb.CB_ADMIN_TEST_NICK_SELECT):
+            ticket_id = _safe_int(payload[len(kb.CB_ADMIN_TEST_NICK_SELECT):])
+            if ticket_id:
+                await admin_h.send_test_nick(
+                    ctx, user_id, ticket_id, callback_id=callback_id
+                )
             return
 
         if payload.startswith(kb.CB_ADMIN_USERS_PAGE):

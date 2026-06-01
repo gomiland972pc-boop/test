@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import logging
+from typing import Optional
 
 import keyboards as kb
 import texts
@@ -8,6 +10,15 @@ from database import STATUS_LABELS
 from handlers.context import BotContext
 from states import State
 from ticket_utils import send_ticket_history, user_ticket_back_keyboard
+
+
+def _dump_attachments(attachments: Optional[list[dict]]) -> Optional[str]:
+    if not attachments:
+        return None
+    try:
+        return json.dumps(attachments, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return None
 
 logger = logging.getLogger(__name__)
 TICKETS_PER_PAGE = 5
@@ -248,10 +259,26 @@ async def create_ticket(
     user_id: int,
     user_name: str,
     text: str,
+    attachments: Optional[list[dict]] = None,
 ) -> None:
-    ticket_id = await ctx.db.create_ticket(user_id=user_id, subject=text)
+    subject = text or "📎 (вложение)"
+    ticket_id = await ctx.db.create_ticket(
+        user_id=user_id,
+        subject=subject,
+        attachments=_dump_attachments(attachments),
+    )
     ctx.states.set(user_id, State.MAIN_MENU)
+    await ctx.db.auto_set_review_if_untouched(ticket_id)
     ticket = await ctx.db.get_ticket(ticket_id)
+
+    try:
+        await ctx.api.send_message(
+            user_id=user_id,
+            text=texts.TICKET_AUTO_REVIEW.format(ticket_id=ticket_id),
+            fmt="markdown",
+        )
+    except Exception as exc:
+        logger.exception("Не удалось отправить авто-статус пользователю: %s", exc)
 
     if ticket:
         await send_ticket_history(
@@ -276,11 +303,17 @@ async def create_ticket(
                     ticket_id=ticket_id,
                     user_name=user_name or "Пользователь",
                     user_id=user_id,
-                    subject=text,
+                    subject=subject,
                 ),
                 attachments=kb.admin_new_ticket(ticket_id),
                 fmt="markdown",
             )
+            if attachments:
+                await ctx.api.send_message(
+                    user_id=admin_id,
+                    text=f"📎 Вложение по тикету #{ticket_id}",
+                    attachments=attachments,
+                )
         except Exception as exc:
             logger.exception("Не удалось уведомить админа %s: %s", admin_id, exc)
 
@@ -290,14 +323,27 @@ async def reply_to_ticket(
     user_id: int,
     text: str,
     ticket_id: int,
+    attachments: Optional[list[dict]] = None,
 ) -> None:
     ticket = await ctx.db.get_ticket(ticket_id)
     if ticket is None or ticket.user_id != user_id:
         ctx.states.set(user_id, State.MAIN_MENU)
         await ctx.api.send_message(user_id=user_id, text="Тикет не найден.")
         return
-    await ctx.db.add_message(ticket.id, "user", text)
+    await ctx.db.add_message(
+        ticket.id, "user", text, attachments=_dump_attachments(attachments)
+    )
     ctx.states.set(user_id, State.MAIN_MENU)
+    status_changed = await ctx.db.auto_set_review_if_untouched(ticket.id)
+    if status_changed:
+        try:
+            await ctx.api.send_message(
+                user_id=user_id,
+                text=texts.TICKET_AUTO_REVIEW.format(ticket_id=ticket.id),
+                fmt="markdown",
+            )
+        except Exception as exc:
+            logger.exception("Не удалось отправить авто-статус: %s", exc)
     updated = await ctx.db.get_ticket(ticket.id)
     profile = await ctx.db.get_user(user_id)
     user_name = profile.name if profile and profile.name else "—"
@@ -319,6 +365,12 @@ async def reply_to_ticket(
                 attachments=kb.admin_new_ticket(ticket.id),
                 fmt="markdown",
             )
+            if attachments:
+                await ctx.api.send_message(
+                    user_id=admin_id,
+                    text=f"📎 Вложение по тикету #{ticket.id}",
+                    attachments=attachments,
+                )
         except Exception as exc:
             logger.exception("Не удалось уведомить админа %s: %s", admin_id, exc)
 
@@ -327,11 +379,24 @@ async def append_to_open_ticket(
     ctx: BotContext,
     user_id: int,
     text: str,
+    attachments: Optional[list[dict]] = None,
 ) -> bool:
     ticket = await ctx.db.find_open_ticket_by_user(user_id)
     if ticket is None:
         return False
-    await ctx.db.add_message(ticket.id, "user", text)
+    await ctx.db.add_message(
+        ticket.id, "user", text, attachments=_dump_attachments(attachments)
+    )
+    status_changed = await ctx.db.auto_set_review_if_untouched(ticket.id)
+    if status_changed:
+        try:
+            await ctx.api.send_message(
+                user_id=user_id,
+                text=texts.TICKET_AUTO_REVIEW.format(ticket_id=ticket.id),
+                fmt="markdown",
+            )
+        except Exception as exc:
+            logger.exception("Не удалось отправить авто-статус: %s", exc)
     profile = await ctx.db.get_user(user_id)
     user_name = profile.name if profile and profile.name else "—"
     for admin_id in ctx.cfg.admin_ids:
@@ -346,6 +411,12 @@ async def append_to_open_ticket(
                 attachments=kb.admin_new_ticket(ticket.id),
                 fmt="markdown",
             )
+            if attachments:
+                await ctx.api.send_message(
+                    user_id=admin_id,
+                    text=f"📎 Вложение по тикету #{ticket.id}",
+                    attachments=attachments,
+                )
         except Exception as exc:
             logger.exception("Не удалось уведомить админа %s: %s", admin_id, exc)
     return True

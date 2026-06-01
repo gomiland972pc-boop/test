@@ -50,6 +50,10 @@ CB_ADMIN_REPLY = "admin:reply:"
 CB_ADMIN_BACK = "admin:back"
 CB_ADMIN_USERS = "admin:users"
 CB_ADMIN_USERS_PAGE = "admin:users_page:"
+CB_ADMIN_WRITE_USER = "admin:write_user"
+CB_ADMIN_TEST_NICK = "admin:test_nick"
+CB_ADMIN_TEST_NICK_PAGE = "admin:test_nick:page:"
+CB_ADMIN_TEST_NICK_SELECT = "admin:test_nick:sel:"
 
 
 def _btn(text: str, payload: str) -> dict:
@@ -228,9 +232,36 @@ def admin_folders(active_count: int = 0, archive_count: int = 0) -> list[dict]:
             [_btn(f"📂 Активные: {active_count}", CB_ADMIN_ACTIVE)],
             [_btn(f"🗄 Архив: {archive_count}", CB_ADMIN_ARCHIVE)],
             [_btn("👥 Пользователи", CB_ADMIN_USERS)],
+            [_btn("✍️ Написать пользователю", CB_ADMIN_WRITE_USER)],
+            [_btn("🧪 Тест ника", CB_ADMIN_TEST_NICK)],
             [_btn("🏠 Меню", CB_BACK_MAIN)],
         ]
     )
+
+
+def admin_test_nick_tickets_list(
+    tickets, page: int = 0, total_pages: int = 1
+) -> list[dict]:
+    rows: list[list[dict]] = []
+    for t in tickets:
+        from database import STATUS_LABELS
+        label = f"#{t.id} | {_format_ticket_date(t.created_at)} | {STATUS_LABELS.get(t.status, t.status)}"
+        rows.append([_btn(label, f"{CB_ADMIN_TEST_NICK_SELECT}{t.id}")])
+    nav: list[dict] = []
+    if page > 0:
+        nav.append(_btn("⬅️", f"{CB_ADMIN_TEST_NICK_PAGE}{page - 1}"))
+    nav.append(_btn(f"{page + 1}/{total_pages}", f"{CB_ADMIN_TEST_NICK_PAGE}{page}"))
+    if page + 1 < total_pages:
+        nav.append(_btn("➡️", f"{CB_ADMIN_TEST_NICK_PAGE}{page + 1}"))
+    if total_pages > 1:
+        rows.append(nav)
+    rows.append([_btn("⬅️ Назад к папкам", CB_ADMIN_BACK)])
+    rows.append([_btn("🏠 Меню", CB_BACK_MAIN)])
+    return _kb(rows)
+
+
+def admin_cancel_to_folders() -> list[dict]:
+    return _kb([[_btn("⬅️ Отмена", CB_ADMIN_BACK)]])
 
 
 def admin_tickets_list(

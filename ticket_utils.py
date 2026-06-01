@@ -36,42 +36,64 @@ def format_ticket_date(value: str) -> str:
         return value
 
 
+SUPPORT_NAME = "Служба Поддержки"
+
+
+def _user_display_name(profile) -> str:
+    if profile and profile.name:
+        return profile.name
+    if profile and profile.username:
+        return f"@{profile.username}"
+    return "—"
+
+
+def _has_attachments(message: dict) -> bool:
+    raw = message.get("attachments")
+    return bool(raw) and raw not in ("null", "[]")
+
+
+def _history_line(message: dict, user_name: str) -> str:
+    sender_label = user_name if message["sender"] == "user" else SUPPORT_NAME
+    text = message.get("text") or ""
+    suffix = " 📎" if _has_attachments(message) else ""
+    return f"{sender_label}: {text}{suffix}".rstrip()
+
+
 async def build_ticket_history(ctx: BotContext, ticket: Ticket) -> str:
-    messages = await ctx.db.get_last_messages(ticket.id)
-    lines = [
-        f"Тикет №{ticket.id}",
-        f"Статус: {STATUS_LABELS.get(ticket.status, ticket.status)}",
-        f"Дата создания: {format_ticket_date(ticket.created_at)}",
-        "",
-        "--------------------------",
-        "История сообщений:",
-    ]
-    if not messages:
-        lines.append("_Сообщений пока нет._")
-    for message in messages:
-        sender = "Клиент" if message["sender"] == "user" else "Специалист"
-        lines.append(f"_{sender}: {message['text']}_")
-    return "\n".join(lines)
+    return await _build_history(ctx, ticket, admin_view=False)
 
 
 async def build_admin_ticket_history(ctx: BotContext, ticket: Ticket) -> str:
+    return await _build_history(ctx, ticket, admin_view=True)
+
+
+async def _build_history(ctx: BotContext, ticket: Ticket, *, admin_view: bool) -> str:
     messages = await ctx.db.get_last_messages(ticket.id)
     profile = await ctx.db.get_user(ticket.user_id)
-    user_name = profile.name if profile and profile.name else "—"
+    user_name = _user_display_name(profile)
+
+    if ticket.initiated_by == "support":
+        from_label = SUPPORT_NAME
+        to_label = user_name
+    else:
+        from_label = user_name
+        to_label = SUPPORT_NAME
+
     lines = [
-        f"🎫 _Тикет_ #{ticket.id}",
-        f"👤 {user_name} (id {ticket.user_id})",
-        f"📌 Статус: {STATUS_LABELS.get(ticket.status, ticket.status)}",
-        f"� Создан: {format_ticket_date(ticket.created_at)}",
-        f"�🕘 Обновлён: {format_ticket_date(ticket.updated_at)}",
+        f"🎫 *Тикет №{ticket.id}*",
+        f"От кого: *{from_label}*",
+        f"Кому: *{to_label}*",
+        f"ID: `{ticket.user_id}`",
+        f"Статус: *{STATUS_LABELS.get(ticket.status, ticket.status)}*",
+        f"Создан: {format_ticket_date(ticket.created_at)}",
+        f"Обновлён: {format_ticket_date(ticket.updated_at)}",
         "",
         "_История:_",
     ]
     if not messages:
         lines.append("_Сообщений пока нет._")
     for message in messages:
-        icon = "👤" if message["sender"] == "user" else "🛠"
-        lines.append(f"{icon} _{message['text']}_")
+        lines.append(_history_line(message, user_name))
     return "\n".join(lines)
 
 

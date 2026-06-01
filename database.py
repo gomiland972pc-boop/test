@@ -32,6 +32,9 @@ class Ticket:
     status: str
     created_at: str
     updated_at: str
+    initiated_by: str = "user"
+    status_manually_set: bool = False
+    recipient_user_id: Optional[int] = None
 
 
 @dataclass
@@ -49,6 +52,14 @@ class UserProfile:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _row_to_ticket(row) -> "Ticket":
+    d = {k: row[k] for k in row.keys()}
+    d["status_manually_set"] = bool(d.get("status_manually_set", 0))
+    if "initiated_by" not in d or d["initiated_by"] is None:
+        d["initiated_by"] = "user"
+    return Ticket(**d)
 
 
 class Database:
@@ -90,12 +101,15 @@ class Database:
             );
 
             CREATE TABLE IF NOT EXISTS tickets (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id     INTEGER NOT NULL REFERENCES users(user_id),
-                subject     TEXT NOT NULL,
-                status      TEXT NOT NULL DEFAULT 'open',
-                created_at  TEXT NOT NULL,
-                updated_at  TEXT NOT NULL
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id             INTEGER NOT NULL REFERENCES users(user_id),
+                subject             TEXT NOT NULL,
+                status              TEXT NOT NULL DEFAULT 'open',
+                created_at          TEXT NOT NULL,
+                updated_at          TEXT NOT NULL,
+                initiated_by        TEXT NOT NULL DEFAULT 'user',
+                status_manually_set INTEGER NOT NULL DEFAULT 0,
+                recipient_user_id   INTEGER
             );
 
             CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
@@ -106,27 +120,50 @@ class Database:
                 ticket_id   INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
                 sender      TEXT NOT NULL CHECK (sender IN ('user','admin')),
                 text        TEXT NOT NULL,
-                created_at  TEXT NOT NULL
+                created_at  TEXT NOT NULL,
+                attachments TEXT
             );
 
             CREATE INDEX IF NOT EXISTS idx_messages_ticket ON messages(ticket_id);
             """
         )
-        await self._migrate_users()
+        await self._migrate_schema()
         await self.conn.commit()
 
-    async def _migrate_users(self) -> None:
-        cur = await self.conn.execute("PRAGMA table_info(users)")
+    async def _migrate_schema(self) -> None:
+        await self._add_missing_columns(
+            "users",
+            [
+                ("is_premium", "INTEGER NOT NULL DEFAULT 0"),
+                ("premium_expiry", "TEXT"),
+                ("consent_accepted", "INTEGER NOT NULL DEFAULT 0"),
+                ("offer_accepted", "INTEGER NOT NULL DEFAULT 0"),
+            ],
+        )
+        await self._add_missing_columns(
+            "tickets",
+            [
+                ("initiated_by", "TEXT NOT NULL DEFAULT 'user'"),
+                ("status_manually_set", "INTEGER NOT NULL DEFAULT 0"),
+                ("recipient_user_id", "INTEGER"),
+            ],
+        )
+        await self._add_missing_columns(
+            "messages",
+            [
+                ("attachments", "TEXT"),
+            ],
+        )
+
+    async def _add_missing_columns(
+        self, table: str, columns: list[tuple[str, str]]
+    ) -> None:
+        cur = await self.conn.execute(f"PRAGMA table_info({table})")
         existing = {row["name"] for row in await cur.fetchall()}
-        for col, definition in [
-            ("is_premium", "INTEGER NOT NULL DEFAULT 0"),
-            ("premium_expiry", "TEXT"),
-            ("consent_accepted", "INTEGER NOT NULL DEFAULT 0"),
-            ("offer_accepted", "INTEGER NOT NULL DEFAULT 0"),
-        ]:
+        for col, definition in columns:
             if col not in existing:
                 await self.conn.execute(
-                    f"ALTER TABLE users ADD COLUMN {col} {definition}"
+                    f"ALTER TABLE {table} ADD COLUMN {col} {definition}"
                 )
 
 
@@ -198,21 +235,36 @@ class Database:
         await self.conn.commit()
 
 
-    async def create_ticket(self, user_id: int, subject: str) -> int:
+    async def create_ticket(
+        self,
+        user_id: int,
+        subject: str,
+        *,
+        initiated_by: str = "user",
+        first_sender: str = "user",
+        attachments: Optional[str] = None,
+    ) -> int:
+        if initiated_by not in ("user", "support"):
+            raise ValueError("initiated_by должен быть 'user' или 'support'")
+        if first_sender not in ("user", "admin"):
+            raise ValueError("first_sender должен быть 'user' или 'admin'")
         ts = _now()
         cur = await self.conn.execute(
             """
-            INSERT INTO tickets(user_id, subject, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO tickets(
+                user_id, subject, status, created_at, updated_at,
+                initiated_by, status_manually_set, recipient_user_id
+            )
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?)
             """,
-            (user_id, subject, STATUS_OPEN, ts, ts),
+            (user_id, subject, STATUS_OPEN, ts, ts, initiated_by, user_id),
         )
         await self.conn.execute(
             """
-            INSERT INTO messages(ticket_id, sender, text, created_at)
-            VALUES (?, 'user', ?, ?)
+            INSERT INTO messages(ticket_id, sender, text, created_at, attachments)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (cur.lastrowid, subject, ts),
+            (cur.lastrowid, first_sender, subject, ts, attachments),
         )
         await self.conn.commit()
         return int(cur.lastrowid)
@@ -224,7 +276,7 @@ class Database:
         row = await cur.fetchone()
         if not row:
             return None
-        return Ticket(**{k: row[k] for k in row.keys()})
+        return _row_to_ticket(row)
 
     async def list_active_tickets(self, limit: int = 50, offset: int = 0) -> list[Ticket]:
         cur = await self.conn.execute(
@@ -237,7 +289,7 @@ class Database:
             (STATUS_CLOSED, limit, offset),
         )
         rows = await cur.fetchall()
-        return [Ticket(**{k: r[k] for k in r.keys()}) for r in rows]
+        return [_row_to_ticket(r) for r in rows]
 
     async def count_active_tickets(self) -> int:
         cur = await self.conn.execute(
@@ -261,7 +313,26 @@ class Database:
             (STATUS_CLOSED, limit, offset),
         )
         rows = await cur.fetchall()
-        return [Ticket(**{k: r[k] for k in r.keys()}) for r in rows]
+        return [_row_to_ticket(r) for r in rows]
+
+    async def list_all_tickets(
+        self, limit: int = 50, offset: int = 0
+    ) -> list[Ticket]:
+        cur = await self.conn.execute(
+            """
+            SELECT * FROM tickets
+            ORDER BY updated_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (limit, offset),
+        )
+        rows = await cur.fetchall()
+        return [_row_to_ticket(r) for r in rows]
+
+    async def count_all_tickets(self) -> int:
+        cur = await self.conn.execute("SELECT COUNT(*) AS count FROM tickets")
+        row = await cur.fetchone()
+        return int(row["count"]) if row else 0
 
     async def count_tickets(self, archived: bool = False) -> int:
         condition = "status = ?" if archived else "status != ?"
@@ -291,7 +362,7 @@ class Database:
             params,
         )
         rows = await cur.fetchall()
-        return [Ticket(**{k: r[k] for k in r.keys()}) for r in rows]
+        return [_row_to_ticket(r) for r in rows]
 
     async def count_user_tickets(self, user_id: int, archived: bool = False) -> int:
         condition = "status = ?" if archived else "status != ?"
@@ -302,26 +373,60 @@ class Database:
         row = await cur.fetchone()
         return int(row["count"]) if row else 0
 
-    async def update_ticket_status(self, ticket_id: int, status: str) -> bool:
+    async def update_ticket_status(
+        self, ticket_id: int, status: str, *, manual: bool = False
+    ) -> bool:
         if status not in STATUS_LABELS:
             raise ValueError(f"Неизвестный статус: {status}")
-        cur = await self.conn.execute(
-            "UPDATE tickets SET status = ?, updated_at = ? WHERE id = ?",
-            (status, _now(), ticket_id),
-        )
+        if manual:
+            cur = await self.conn.execute(
+                """
+                UPDATE tickets
+                SET status = ?, updated_at = ?, status_manually_set = 1
+                WHERE id = ?
+                """,
+                (status, _now(), ticket_id),
+            )
+        else:
+            cur = await self.conn.execute(
+                "UPDATE tickets SET status = ?, updated_at = ? WHERE id = ?",
+                (status, _now(), ticket_id),
+            )
         await self.conn.commit()
         return cur.rowcount > 0
 
+    async def auto_set_review_if_untouched(self, ticket_id: int) -> bool:
+        ticket = await self.get_ticket(ticket_id)
+        if ticket is None:
+            return False
+        if ticket.status_manually_set:
+            return False
+        if ticket.status == STATUS_CLOSED:
+            return False
+        if ticket.status == STATUS_REVIEW:
+            return False
+        await self.conn.execute(
+            "UPDATE tickets SET status = ?, updated_at = ? WHERE id = ?",
+            (STATUS_REVIEW, _now(), ticket_id),
+        )
+        await self.conn.commit()
+        return True
 
-    async def add_message(self, ticket_id: int, sender: str, text: str) -> None:
+    async def add_message(
+        self,
+        ticket_id: int,
+        sender: str,
+        text: str,
+        attachments: Optional[str] = None,
+    ) -> None:
         if sender not in ("user", "admin"):
             raise ValueError("sender должен быть 'user' или 'admin'")
         await self.conn.execute(
             """
-            INSERT INTO messages(ticket_id, sender, text, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO messages(ticket_id, sender, text, created_at, attachments)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (ticket_id, sender, text, _now()),
+            (ticket_id, sender, text, _now(), attachments),
         )
         await self.conn.execute(
             "UPDATE tickets SET updated_at = ? WHERE id = ?",
@@ -337,7 +442,7 @@ class Database:
             params = (ticket_id, limit)
         cur = await self.conn.execute(
             f"""
-            SELECT sender, text, created_at FROM messages
+            SELECT sender, text, created_at, attachments FROM messages
             WHERE ticket_id = ?
             ORDER BY id ASC
             {limit_sql}
@@ -379,4 +484,4 @@ class Database:
         row = await cur.fetchone()
         if not row:
             return None
-        return Ticket(**{k: row[k] for k in row.keys()})
+        return _row_to_ticket(row)

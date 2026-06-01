@@ -12,6 +12,8 @@ class State(str, Enum):
     PROFILE_MENU = "profile_menu"            # подменю «Профиль и каналы»
     TICKET_WAITING_TEXT = "ticket_waiting_text"
     ADMIN_REPLYING = "admin_replying"  # админ пишет ответ по конкретному тикету
+    ADMIN_WAITING_USER_ID = "admin_waiting_user_id"  # админ вводит ID для нового тикета
+    ADMIN_WAITING_FIRST_MESSAGE = "admin_waiting_first_message"  # админ пишет первое сообщение пользователю
 
 
 class StateStore:

@@ -4,7 +4,7 @@ import asyncio
 import logging
 import mimetypes
 import os
-from typing import Any, AsyncIterator, Optional
+from typing import Any, Optional
 
 import aiohttp
 
@@ -13,6 +13,21 @@ logger = logging.getLogger(__name__)
 
 class MaxApiError(Exception):
     pass
+
+
+def _parse_retry_after(header: Optional[str], body: dict) -> float:
+    if header:
+        try:
+            return max(0.5, float(header))
+        except (TypeError, ValueError):
+            pass
+    raw = body.get("retry_after") if isinstance(body, dict) else None
+    if raw is not None:
+        try:
+            return max(0.5, float(raw))
+        except (TypeError, ValueError):
+            pass
+    return 1.0
 
 
 class MaxBotApi:
@@ -80,6 +95,18 @@ class MaxBotApi:
                     except Exception:
                         text = await resp.text()
                         data = {"raw": text}
+                    if resp.status == 429 and attempt < 3:
+                        retry_after = _parse_retry_after(
+                            resp.headers.get("Retry-After"), data
+                        )
+                        logger.warning(
+                            "429 Too Many Requests %s %s — повтор через %.1fs",
+                            method,
+                            path,
+                            retry_after,
+                        )
+                        await asyncio.sleep(retry_after)
+                        continue
                     if resp.status >= 400:
                         raise MaxApiError(
                             f"{method} {path} -> HTTP {resp.status}: {data}"
@@ -100,19 +127,25 @@ class MaxBotApi:
         raise MaxApiError(f"Сеть недоступна: {last_exc}") from last_exc
 
 
-    async def get_updates(
+    async def get_me(self) -> dict:
+        return await self._request("GET", "/me")
+
+    async def set_webhook(
         self,
-        marker: Optional[int] = None,
-        timeout: int = 30,
-        limit: int = 100,
-        types: Optional[list[str]] = None,
+        url: str,
+        *,
+        update_types: Optional[list[str]] = None,
+        secret: Optional[str] = None,
     ) -> dict:
-        params: dict[str, Any] = {"timeout": timeout, "limit": limit}
-        if marker is not None:
-            params["marker"] = marker
-        if types:
-            params["types"] = ",".join(types)
-        return await self._request("GET", "/updates", params=params)
+        body: dict[str, Any] = {"url": url}
+        if update_types:
+            body["update_types"] = list(update_types)
+        if secret:
+            body["secret"] = secret
+        return await self._request("POST", "/subscriptions", json=body)
+
+    async def get_subscriptions(self) -> dict:
+        return await self._request("GET", "/subscriptions")
 
     async def send_message(
         self,
@@ -227,22 +260,3 @@ class MaxBotApi:
                 await asyncio.sleep(delay)
 
         raise MaxApiError(f"Не удалось загрузить файл {file_path}: {last_exc}") from last_exc
-
-    async def poll_updates(
-        self,
-        types: Optional[list[str]] = None,
-        timeout: int = 30,
-    ) -> AsyncIterator[dict]:
-        marker: Optional[int] = None
-        while True:
-            try:
-                data = await self.get_updates(
-                    marker=marker, timeout=timeout, types=types
-                )
-            except MaxApiError as exc:
-                logger.error("Ошибка получения обновлений: %s", exc)
-                await asyncio.sleep(3)
-                continue
-            for upd in data.get("updates", []) or []:
-                yield upd
-            marker = data.get("marker") or marker
