@@ -79,7 +79,7 @@ def _history_line(message: dict, user_name_md: str) -> str | None:
     if sender == "user":
         sender_md = user_name_md
     else:
-        sender_md = f"**{SUPPORT_NAME}**"
+        sender_md = SUPPORT_NAME
     safe_text = _md_escape(text)
     suffix = " 📎" if _has_attachments(message) else ""
     return f"{sender_md}: {safe_text}{suffix}".rstrip()
@@ -99,7 +99,7 @@ async def _build_history(ctx: BotContext, ticket: Ticket, *, admin_view: bool) -
 
     # имя пользователя — ссылкой у админа, обычным у пользователя
     user_md = _user_name_md(profile, ticket.user_id, as_link=admin_view)
-    support_md = f"*{SUPPORT_NAME}*"
+    support_md = SUPPORT_NAME
 
     if ticket.initiated_by == "support":
         from_label = support_md
