@@ -116,7 +116,8 @@ async def _build_history(ctx: BotContext, ticket: Ticket, *, admin_view: bool) -
         f"🆔 **ID:** `{ticket.user_id}`",
         f"📅 **Создан:** {format_ticket_date(ticket.created_at)}",
         f"🔄 **Обновлён:** {format_ticket_date(ticket.updated_at)}",
-        f"🔖 **Статус:** **{_md_escape(status_label)}**",
+        "",
+        f"🔖 **Статус:** {_md_escape(status_label)}",
         "",
         "💬 **История:**",
     ]

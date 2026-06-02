@@ -248,7 +248,7 @@ async def ask_reply_to_ticket(
     ctx.states.set(user_id, State.TICKET_WAITING_TEXT, ticket_id=ticket_id)
     await ctx.reply_menu(
         user_id=user_id,
-        text="💬 Напишите сообщение для тикета одним сообщением.",
+        text="💬 Напишите сообщение для тикета одним сообщением. Можно прикрепить фото или файл.",
         attachments=kb.back_from_ticket(),
         callback_id=callback_id,
     )
@@ -297,7 +297,12 @@ async def create_ticket(
 
     for admin_id in ctx.cfg.admin_ids:
         try:
-            admin_attachments = (attachments or []) + kb.admin_new_ticket(ticket_id)
+            if attachments:
+                await ctx.api.send_message(
+                    user_id=admin_id,
+                    text="",
+                    attachments=attachments,
+                )
             await ctx.api.send_message(
                 user_id=admin_id,
                 text=texts.ADMIN_NEW_TICKET.format(
@@ -306,7 +311,7 @@ async def create_ticket(
                     user_id=user_id,
                     subject=subject,
                 ),
-                attachments=admin_attachments,
+                attachments=kb.admin_new_ticket(ticket_id),
                 fmt="markdown",
             )
         except Exception as exc:
@@ -350,7 +355,12 @@ async def reply_to_ticket(
     )
     for admin_id in ctx.cfg.admin_ids:
         try:
-            admin_attachments = (attachments or []) + kb.admin_new_ticket(ticket.id)
+            if attachments:
+                await ctx.api.send_message(
+                    user_id=admin_id,
+                    text="",
+                    attachments=attachments,
+                )
             await ctx.api.send_message(
                 user_id=admin_id,
                 text=(
@@ -358,7 +368,7 @@ async def reply_to_ticket(
                     f"(статус: {STATUS_LABELS.get(ticket.status, ticket.status)})\n\n"
                     f"👤 {user_name} (id {user_id}): {text}"
                 ),
-                attachments=admin_attachments,
+                attachments=kb.admin_new_ticket(ticket.id),
                 fmt="markdown",
             )
         except Exception as exc:
@@ -391,7 +401,12 @@ async def append_to_open_ticket(
     user_name = profile.name if profile and profile.name else "—"
     for admin_id in ctx.cfg.admin_ids:
         try:
-            admin_attachments = (attachments or []) + kb.admin_new_ticket(ticket.id)
+            if attachments:
+                await ctx.api.send_message(
+                    user_id=admin_id,
+                    text="",
+                    attachments=attachments,
+                )
             await ctx.api.send_message(
                 user_id=admin_id,
                 text=(
@@ -399,7 +414,7 @@ async def append_to_open_ticket(
                     f"(статус: {STATUS_LABELS.get(ticket.status, ticket.status)})\n\n"
                     f"👤 {user_name} (id {user_id}): {text}"
                 ),
-                attachments=admin_attachments,
+                attachments=kb.admin_new_ticket(ticket.id),
                 fmt="markdown",
             )
         except Exception as exc:

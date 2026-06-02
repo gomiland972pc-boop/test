@@ -440,10 +440,15 @@ async def send_first_message(
         return
 
     try:
+        if attachments:
+            await ctx.api.send_message(
+                user_id=target_user_id,
+                text="",
+                attachments=attachments,
+            )
         await ctx.api.send_message(
             user_id=target_user_id,
             text=texts.USER_SUPPORT_INITIATED.format(ticket_id=ticket_id),
-            attachments=attachments,
             fmt="markdown",
         )
         from ticket_utils import user_ticket_back_keyboard
@@ -496,10 +501,15 @@ async def send_reply(
     ctx.states.set(admin_id, State.MAIN_MENU)
 
     try:
+        if attachments:
+            await ctx.api.send_message(
+                user_id=ticket.user_id,
+                text="",
+                attachments=attachments,
+            )
         await ctx.api.send_message(
             user_id=ticket.user_id,
             text=texts.USER_ADMIN_REPLY.format(ticket_id=ticket_id, text=reply_text),
-            attachments=attachments,
             fmt="markdown",
         )
     except Exception as exc:
