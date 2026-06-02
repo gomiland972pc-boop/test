@@ -214,6 +214,96 @@ class MaxBotApi:
             logger.info("Не удалось удалить подписки (возможно, их не было): %s", exc)
             return {}
 
+    async def reupload_attachments(
+        self, attachments: Optional[list[dict]]
+    ) -> list[dict]:
+        """Перезаливает входящие вложения через /uploads, чтобы их можно было
+        переслать в другой чат. Max не разрешает переиспользовать чужие
+        payload — поэтому скачиваем и грузим заново.
+        Кнопки/ссылки (inline_keyboard, link, callback) пропускаются без изменений.
+        """
+        if not attachments:
+            return []
+        result: list[dict] = []
+        for att in attachments:
+            if not isinstance(att, dict):
+                continue
+            att_type = (att.get("type") or "").lower()
+            payload = att.get("payload") or {}
+            # Кнопки/ссылки — не медиа, оставляем как есть
+            if att_type in ("inline_keyboard", "link", "callback", "share"):
+                result.append(att)
+                continue
+            url = (
+                payload.get("url")
+                or payload.get("download_url")
+                or payload.get("file_url")
+            )
+            if not url:
+                logger.warning("Вложение без url, пропуск: %s", att)
+                continue
+            try:
+                reuploaded = await self._reupload_one(att_type or "file", url)
+                result.append(reuploaded)
+            except Exception as exc:
+                logger.exception("Не удалось перезалить вложение %s: %s", att_type, exc)
+        return result
+
+    async def _reupload_one(self, att_type: str, source_url: str) -> dict:
+        """Скачивает файл по source_url и загружает в Max заново."""
+        # Mapping наших типов вложений в типы POST /uploads
+        upload_type_map = {
+            "image": "image",
+            "photo": "image",
+            "video": "video",
+            "audio": "audio",
+            "voice": "audio",
+            "file": "file",
+            "sticker": "image",
+        }
+        upload_type = upload_type_map.get(att_type, "file")
+
+        async with aiohttp.ClientSession(timeout=self._upload_timeout) as dl_sess:
+            async with dl_sess.get(source_url) as resp:
+                if resp.status >= 400:
+                    raise MaxApiError(
+                        f"Не удалось скачать вложение {source_url}: HTTP {resp.status}"
+                    )
+                file_bytes = await resp.read()
+                content_type = (
+                    resp.headers.get("Content-Type") or "application/octet-stream"
+                ).split(";")[0].strip()
+
+        ext = mimetypes.guess_extension(content_type) or ""
+        filename = f"attachment{ext}" if ext else "attachment"
+
+        data = await self._request(
+            "POST", "/uploads", params={"type": upload_type}
+        )
+        upload_url = data.get("url")
+        if not upload_url:
+            raise MaxApiError(f"POST /uploads не вернул url: {data}")
+
+        form = aiohttp.FormData()
+        form.add_field(
+            "data",
+            file_bytes,
+            filename=filename,
+            content_type=content_type,
+        )
+        async with aiohttp.ClientSession(timeout=self._upload_timeout) as upload_sess:
+            async with upload_sess.post(upload_url, data=form) as resp:
+                if resp.status >= 400:
+                    text = await resp.text()
+                    raise MaxApiError(
+                        f"Upload reupload -> HTTP {resp.status}: {text}"
+                    )
+                try:
+                    payload = await resp.json(content_type=None)
+                except Exception:
+                    payload = {"raw": await resp.text()}
+        return {"type": upload_type, "payload": payload}
+
     async def upload_file(self, file_path: str) -> dict:
         filename = os.path.basename(file_path)
         ascii_name = filename.encode("ascii", "replace").decode("ascii")

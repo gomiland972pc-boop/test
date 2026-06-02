@@ -297,12 +297,6 @@ async def create_ticket(
 
     for admin_id in ctx.cfg.admin_ids:
         try:
-            if attachments:
-                await ctx.api.send_message(
-                    user_id=admin_id,
-                    text="",
-                    attachments=attachments,
-                )
             await ctx.api.send_message(
                 user_id=admin_id,
                 text=texts.ADMIN_NEW_TICKET.format(
@@ -355,12 +349,6 @@ async def reply_to_ticket(
     )
     for admin_id in ctx.cfg.admin_ids:
         try:
-            if attachments:
-                await ctx.api.send_message(
-                    user_id=admin_id,
-                    text="",
-                    attachments=attachments,
-                )
             await ctx.api.send_message(
                 user_id=admin_id,
                 text=(
@@ -401,12 +389,6 @@ async def append_to_open_ticket(
     user_name = profile.name if profile and profile.name else "—"
     for admin_id in ctx.cfg.admin_ids:
         try:
-            if attachments:
-                await ctx.api.send_message(
-                    user_id=admin_id,
-                    text="",
-                    attachments=attachments,
-                )
             await ctx.api.send_message(
                 user_id=admin_id,
                 text=(

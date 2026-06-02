@@ -169,6 +169,45 @@ async def send_ticket_history(
             fmt="markdown",
         )
 
+    # Если это первая страница истории — после самой истории шлём вложения
+    # каждого сообщения отдельным постом «📎 Вложение N к тикету №X».
+    if page == 0:
+        await _send_ticket_attachments(ctx, user_id, ticket)
+
+
+async def _send_ticket_attachments(
+    ctx: BotContext, user_id: int, ticket: Ticket
+) -> None:
+    import json as _json
+
+    messages = await ctx.db.get_last_messages(ticket.id)
+    counter = 0
+    for msg in messages:
+        raw = msg.get("attachments")
+        if not raw or raw in ("null", "[]"):
+            continue
+        try:
+            attachments = _json.loads(raw) if isinstance(raw, str) else raw
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(attachments, list) or not attachments:
+            continue
+        counter += 1
+        try:
+            reuploaded = await ctx.api.reupload_attachments(attachments)
+        except Exception:
+            reuploaded = []
+        caption = f"📎 Вложение {counter} к тикету №{ticket.id}"
+        try:
+            await ctx.api.send_message(
+                user_id=user_id,
+                text=caption,
+                attachments=reuploaded or None,
+                fmt="markdown",
+            )
+        except Exception:
+            pass
+
 
 def user_ticket_back_keyboard(ticket: Ticket) -> list[dict]:
     return kb.user_ticket_controls(ticket.id, ticket.status == STATUS_CLOSED)
