@@ -25,7 +25,7 @@ UPDATE_TYPES = ["message_created", "message_callback", "bot_started"]
 
 async def run() -> None:
     cfg = Config.load()
-    db = Database(cfg.db_path)
+    db = Database(cfg.database_url)
     await db.connect()
 
     api = MaxBotApi(token=cfg.bot_token, base_url=cfg.api_base)
@@ -70,7 +70,7 @@ async def run() -> None:
         except NotImplementedError:
             signal.signal(sig, lambda *_: _graceful_stop())
 
-    logger.info("Бот запущен. admin_ids=%s, db=%s", cfg.admin_ids, cfg.db_path)
+    logger.info("Бот запущен. admin_ids=%s, db=postgres", cfg.admin_ids)
 
     try:
         await stop_event.wait()

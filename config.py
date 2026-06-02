@@ -13,7 +13,7 @@ class Config:
 
     bot_token: str
     admin_ids: list[int]
-    db_path: str
+    database_url: str
     api_base: str
     webhook_url: str
     webhook_secret: str
@@ -25,7 +25,7 @@ class Config:
     def load(cls) -> "Config":
         token = os.getenv("MAX_BOT_TOKEN", "").strip()
         admin_raw = os.getenv("ADMIN_IDS", os.getenv("ADMIN_ID", "0")).strip()
-        db_path = os.getenv("DB_PATH", "bot.db").strip()
+        database_url = os.getenv("DATABASE_URL", "").strip()
         api_base = os.getenv("MAX_API_BASE", "https://botapi.max.ru").rstrip("/")
         webhook_url = os.getenv("WEBHOOK_URL", "").strip()
         webhook_secret = os.getenv("WEBHOOK_SECRET", "").strip()
@@ -40,6 +40,11 @@ class Config:
         if not token:
             raise RuntimeError(
                 "MAX_BOT_TOKEN не задан. Скопируйте .env.example в .env и заполните."
+            )
+        if not database_url:
+            raise RuntimeError(
+                "DATABASE_URL не задан. Укажите connection string PostgreSQL "
+                "(формат: postgresql://user:password@host:port/dbname)."
             )
         if not webhook_url:
             raise RuntimeError(
@@ -65,7 +70,7 @@ class Config:
         return cls(
             bot_token=token,
             admin_ids=admin_ids,
-            db_path=db_path,
+            database_url=database_url,
             api_base=api_base,
             webhook_url=webhook_url,
             webhook_secret=webhook_secret,
