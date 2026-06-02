@@ -39,6 +39,30 @@ def format_ticket_date(value: str) -> str:
 SUPPORT_NAME = "Служба Поддержки"
 
 
+async def relay_attachments_now(
+    ctx: BotContext, target_user_id: int, attachments: list[dict] | None
+) -> None:
+    """Прямо сейчас пересылает входящие вложения адресату.
+    Скачиваем и заново загружаем через /uploads (иначе Max отказывает,
+    т.к. чужие payload медиа имеют короткий срок жизни)."""
+    if not attachments:
+        return
+    try:
+        reuploaded = await ctx.api.reupload_attachments(attachments)
+    except Exception:
+        reuploaded = []
+    if not reuploaded:
+        return
+    try:
+        await ctx.api.send_message(
+            user_id=target_user_id,
+            text="",
+            attachments=reuploaded,
+        )
+    except Exception:
+        pass
+
+
 def _md_escape(s: str) -> str:
     if not s:
         return s
@@ -79,7 +103,7 @@ def _history_line(message: dict, user_name_md: str) -> str | None:
     if sender == "user":
         sender_md = user_name_md
     else:
-        sender_md = SUPPORT_NAME
+        sender_md = f"**{SUPPORT_NAME}**"
     safe_text = _md_escape(text)
     suffix = " 📎" if _has_attachments(message) else ""
     return f"{sender_md}: {safe_text}{suffix}".rstrip()
@@ -99,7 +123,7 @@ async def _build_history(ctx: BotContext, ticket: Ticket, *, admin_view: bool) -
 
     # имя пользователя — ссылкой у админа, обычным у пользователя
     user_md = _user_name_md(profile, ticket.user_id, as_link=admin_view)
-    support_md = SUPPORT_NAME
+    support_md = f"**{SUPPORT_NAME}**"
 
     if ticket.initiated_by == "support":
         from_label = support_md

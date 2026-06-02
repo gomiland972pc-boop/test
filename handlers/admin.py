@@ -11,7 +11,7 @@ import texts
 from database import STATUS_LABELS
 from handlers.context import BotContext
 from states import State
-from ticket_utils import send_ticket_history
+from ticket_utils import relay_attachments_now, send_ticket_history
 
 
 def _dump_attachments(attachments: Optional[list[dict]]) -> Optional[str]:
@@ -440,6 +440,7 @@ async def send_first_message(
         return
 
     try:
+        await relay_attachments_now(ctx, target_user_id, attachments)
         await ctx.api.send_message(
             user_id=target_user_id,
             text=texts.USER_SUPPORT_INITIATED.format(ticket_id=ticket_id),
@@ -495,6 +496,7 @@ async def send_reply(
     ctx.states.set(admin_id, State.MAIN_MENU)
 
     try:
+        await relay_attachments_now(ctx, ticket.user_id, attachments)
         await ctx.api.send_message(
             user_id=ticket.user_id,
             text=texts.USER_ADMIN_REPLY.format(ticket_id=ticket_id, text=reply_text),

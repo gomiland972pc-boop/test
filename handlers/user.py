@@ -9,7 +9,7 @@ import texts
 from database import STATUS_LABELS
 from handlers.context import BotContext
 from states import State
-from ticket_utils import send_ticket_history, user_ticket_back_keyboard
+from ticket_utils import relay_attachments_now, send_ticket_history, user_ticket_back_keyboard
 
 
 def _dump_attachments(attachments: Optional[list[dict]]) -> Optional[str]:
@@ -297,6 +297,7 @@ async def create_ticket(
 
     for admin_id in ctx.cfg.admin_ids:
         try:
+            await relay_attachments_now(ctx, admin_id, attachments)
             await ctx.api.send_message(
                 user_id=admin_id,
                 text=texts.ADMIN_NEW_TICKET.format(
@@ -349,6 +350,7 @@ async def reply_to_ticket(
     )
     for admin_id in ctx.cfg.admin_ids:
         try:
+            await relay_attachments_now(ctx, admin_id, attachments)
             await ctx.api.send_message(
                 user_id=admin_id,
                 text=(
@@ -389,6 +391,7 @@ async def append_to_open_ticket(
     user_name = profile.name if profile and profile.name else "—"
     for admin_id in ctx.cfg.admin_ids:
         try:
+            await relay_attachments_now(ctx, admin_id, attachments)
             await ctx.api.send_message(
                 user_id=admin_id,
                 text=(
