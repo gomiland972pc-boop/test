@@ -88,7 +88,7 @@ async def open_ticket(
 
     ticket = await ctx.db.get_ticket(ticket_id)
     if ticket is None:
-        await ctx.api.send_message(user_id=admin_id, text=f"Тикет #{ticket_id} не найден.")
+        await ctx.api.send_message(user_id=admin_id, text=f"Тикет №{ticket_id} не найден.")
         return
 
     await send_ticket_history(
@@ -115,7 +115,7 @@ async def set_status(
     ok = await ctx.db.update_ticket_status(ticket_id, status, manual=True)
     if not ok:
         await ctx.api.send_message(
-            user_id=admin_id, text=f"Не удалось обновить тикет #{ticket_id}."
+            user_id=admin_id, text=f"Не удалось обновить тикет №{ticket_id}."
         )
         return
 
@@ -126,7 +126,7 @@ async def set_status(
     label = STATUS_LABELS.get(status, status)
     await ctx.api.send_message(
         user_id=admin_id,
-        text=f"✅ Тикет *#{ticket_id}* -> *{label}*.",
+        text=f"✅ Тикет *№{ticket_id}* -> *{label}*.",
         fmt="markdown",
     )
 
@@ -207,7 +207,7 @@ async def ask_reply(ctx: BotContext, admin_id: int, ticket_id: int) -> None:
     ticket = await ctx.db.get_ticket(ticket_id)
     if ticket is None:
         await ctx.api.send_message(
-            user_id=admin_id, text=f"Тикет #{ticket_id} не найден."
+            user_id=admin_id, text=f"Тикет №{ticket_id} не найден."
         )
         return
     ctx.states.set(admin_id, State.ADMIN_REPLYING, ticket_id=ticket_id)
@@ -277,7 +277,7 @@ async def send_test_nick(
     ticket = await ctx.db.get_ticket(ticket_id)
     if ticket is None:
         await ctx.api.send_message(
-            user_id=admin_id, text=f"Тикет #{ticket_id} не найден."
+            user_id=admin_id, text=f"Тикет №{ticket_id} не найден."
         )
         return
 
@@ -290,7 +290,7 @@ async def send_test_nick(
     html_name = _html_escape(name)
 
     md_lines = [
-        f"🧪 *Тест ника по тикету #{ticket_id}*",
+        f"🧪 *Тест ника по тикету №{ticket_id}*",
         f"user\\_id: `{uid}`",
         f"name: `{name or '—'}`",
         f"username: `{username or '—'}`",
@@ -311,7 +311,7 @@ async def send_test_nick(
     md_text = "\n".join(md_lines)
 
     html_parts = [
-        f"<b>HTML-варианты (тикет #{ticket_id})</b>",
+        f"<b>HTML-варианты (тикет №{ticket_id})</b>",
         f'A) max://user/id → <a href="max://user/{uid}">{html_name}</a>',
         f'B) https://max.ru/id → <a href="https://max.ru/id{uid}">{html_name}</a>',
     ]
@@ -443,6 +443,7 @@ async def send_first_message(
         await ctx.api.send_message(
             user_id=target_user_id,
             text=texts.USER_SUPPORT_INITIATED.format(ticket_id=ticket_id),
+            attachments=attachments,
             fmt="markdown",
         )
         from ticket_utils import user_ticket_back_keyboard
@@ -452,12 +453,6 @@ async def send_first_message(
             ticket,
             attachments=user_ticket_back_keyboard(ticket),
         )
-        if attachments:
-            await ctx.api.send_message(
-                user_id=target_user_id,
-                text=f"📎 Вложение по тикету #{ticket_id}",
-                attachments=attachments,
-            )
     except Exception as exc:
         logger.exception("Не удалось доставить тикет пользователю: %s", exc)
         await ctx.api.send_message(
@@ -489,7 +484,7 @@ async def send_reply(
     ticket = await ctx.db.get_ticket(ticket_id)
     if ticket is None:
         await ctx.api.send_message(
-            user_id=admin_id, text=f"Тикет #{ticket_id} не найден."
+            user_id=admin_id, text=f"Тикет №{ticket_id} не найден."
         )
         ctx.states.reset(admin_id)
         return
@@ -504,14 +499,9 @@ async def send_reply(
         await ctx.api.send_message(
             user_id=ticket.user_id,
             text=texts.USER_ADMIN_REPLY.format(ticket_id=ticket_id, text=reply_text),
+            attachments=attachments,
             fmt="markdown",
         )
-        if attachments:
-            await ctx.api.send_message(
-                user_id=ticket.user_id,
-                text=f"📎 Вложение по тикету #{ticket_id}",
-                attachments=attachments,
-            )
     except Exception as exc:
         logger.exception("Не удалось отправить ответ пользователю: %s", exc)
         await ctx.api.send_message(

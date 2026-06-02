@@ -107,17 +107,17 @@ USER_TICKETS_EMPTY_ACTIVE = "📂 Активных тикетов нет."
 USER_TICKETS_EMPTY_ARCHIVE = "🗄 Архив тикетов пуст."
 USER_TICKETS_ACTIVE_HEADER = "📂 *Активные тикеты:*"
 USER_TICKETS_ARCHIVE_HEADER = "🗄 *Архив тикетов:*"
-TICKET_CREATED = "✅ Тикет *#{ticket_id}* создан. Ожидайте ответа специалиста."
+TICKET_CREATED = "✅ Тикет *№{ticket_id}* создан. Ожидайте ответа специалиста."
 
 TICKET_STATUS_CHANGED = (
-    "🔔 Статус вашего тикета *#{ticket_id}* изменён: *{status}*."
+    "🔔 Статус вашего тикета *№{ticket_id}* изменён: *{status}*."
 )
 
 TICKET_AUTO_REVIEW = "✅ Тикет №*{ticket_id}* → *На рассмотрении*"
 
 
 ADMIN_NEW_TICKET = (
-    "🆕 *Новый тикет #{ticket_id}*\n"
+    "🆕 *Новый тикет №{ticket_id}*\n"
     "👤 От: {user_name} (id {user_id})\n\n"
     "💬 {subject}"
 )
@@ -130,11 +130,11 @@ ADMIN_TICKETS_EMPTY_ACTIVE = "📭 Активных тикетов нет."
 ADMIN_TICKETS_EMPTY_ARCHIVE = "📭 В архиве тикетов нет."
 
 ADMIN_ASK_REPLY = (
-    "✍️ Введите сообщение для пользователя тикета *#{ticket_id}*. "
+    "✍️ Введите сообщение для пользователя тикета *№{ticket_id}*. "
     "Оно будет отправлено от имени бота."
 )
-ADMIN_REPLY_SENT = "📤 Ответ отправлен пользователю тикета *#{ticket_id}*."
-USER_ADMIN_REPLY = "💬 *Ответ поддержки по тикету #{ticket_id}:*\n\n{text}"
+ADMIN_REPLY_SENT = "📤 Ответ отправлен пользователю тикета *№{ticket_id}*."
+USER_ADMIN_REPLY = "💬 *Ответ поддержки по тикету №{ticket_id}:*\n\n{text}"
 
 
 ADMIN_USERS_HEADER = (

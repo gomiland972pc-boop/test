@@ -56,12 +56,9 @@ def _user_display_name(profile) -> str:
 
 
 def _user_name_md(profile, user_id: int, *, as_link: bool) -> str:
-    """Имя пользователя в Markdown. Жирным; для админа — ещё и кликабельной ссылкой."""
+    """Имя пользователя в Markdown — всегда жирным, без ссылки."""
     name = _user_display_name(profile)
-    safe = _md_escape(name)
-    if as_link:
-        return f"*[{safe}](max://user/{user_id})*"
-    return f"*{safe}*"
+    return f"*{_md_escape(name)}*"
 
 
 def _has_attachments(message: dict) -> bool:
@@ -70,11 +67,18 @@ def _has_attachments(message: dict) -> bool:
 
 
 def _history_line(message: dict, user_name_md: str) -> str:
-    if message["sender"] == "user":
+    sender = message["sender"]
+    text = message.get("text") or ""
+    if sender == "system":
+        # Системное событие: text закодирован как "status:<label>".
+        if text.startswith("status:"):
+            label = text.split(":", 1)[1]
+            return f"_🔔 Статус тикета изменился на *{_md_escape(label)}*_"
+        return f"_{_md_escape(text)}_"
+    if sender == "user":
         sender_md = user_name_md
     else:
         sender_md = f"*{SUPPORT_NAME}*"
-    text = message.get("text") or ""
     safe_text = _md_escape(text)
     suffix = " 📎" if _has_attachments(message) else ""
     return f"{sender_md}: {safe_text}{suffix}".rstrip()

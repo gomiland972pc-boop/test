@@ -297,6 +297,7 @@ async def create_ticket(
 
     for admin_id in ctx.cfg.admin_ids:
         try:
+            admin_attachments = (attachments or []) + kb.admin_new_ticket(ticket_id)
             await ctx.api.send_message(
                 user_id=admin_id,
                 text=texts.ADMIN_NEW_TICKET.format(
@@ -305,15 +306,9 @@ async def create_ticket(
                     user_id=user_id,
                     subject=subject,
                 ),
-                attachments=kb.admin_new_ticket(ticket_id),
+                attachments=admin_attachments,
                 fmt="markdown",
             )
-            if attachments:
-                await ctx.api.send_message(
-                    user_id=admin_id,
-                    text=f"📎 Вложение по тикету #{ticket_id}",
-                    attachments=attachments,
-                )
         except Exception as exc:
             logger.exception("Не удалось уведомить админа %s: %s", admin_id, exc)
 
@@ -355,22 +350,17 @@ async def reply_to_ticket(
     )
     for admin_id in ctx.cfg.admin_ids:
         try:
+            admin_attachments = (attachments or []) + kb.admin_new_ticket(ticket.id)
             await ctx.api.send_message(
                 user_id=admin_id,
                 text=(
-                    f"💬 *Сообщение по тикету #{ticket.id}* "
+                    f"💬 *Сообщение по тикету №{ticket.id}* "
                     f"(статус: {STATUS_LABELS.get(ticket.status, ticket.status)})\n\n"
                     f"👤 {user_name} (id {user_id}): {text}"
                 ),
-                attachments=kb.admin_new_ticket(ticket.id),
+                attachments=admin_attachments,
                 fmt="markdown",
             )
-            if attachments:
-                await ctx.api.send_message(
-                    user_id=admin_id,
-                    text=f"📎 Вложение по тикету #{ticket.id}",
-                    attachments=attachments,
-                )
         except Exception as exc:
             logger.exception("Не удалось уведомить админа %s: %s", admin_id, exc)
 
@@ -401,22 +391,17 @@ async def append_to_open_ticket(
     user_name = profile.name if profile and profile.name else "—"
     for admin_id in ctx.cfg.admin_ids:
         try:
+            admin_attachments = (attachments or []) + kb.admin_new_ticket(ticket.id)
             await ctx.api.send_message(
                 user_id=admin_id,
                 text=(
-                    f"💬 *Сообщение по тикету #{ticket.id}* "
+                    f"💬 *Сообщение по тикету №{ticket.id}* "
                     f"(статус: {STATUS_LABELS.get(ticket.status, ticket.status)})\n\n"
                     f"👤 {user_name} (id {user_id}): {text}"
                 ),
-                attachments=kb.admin_new_ticket(ticket.id),
+                attachments=admin_attachments,
                 fmt="markdown",
             )
-            if attachments:
-                await ctx.api.send_message(
-                    user_id=admin_id,
-                    text=f"📎 Вложение по тикету #{ticket.id}",
-                    attachments=attachments,
-                )
         except Exception as exc:
             logger.exception("Не удалось уведомить админа %s: %s", admin_id, exc)
     return True

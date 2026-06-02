@@ -119,7 +119,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS messages (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 ticket_id   INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-                sender      TEXT NOT NULL CHECK (sender IN ('user','admin')),
+                sender      TEXT NOT NULL CHECK (sender IN ('user','admin','system')),
                 text        TEXT NOT NULL,
                 created_at  TEXT NOT NULL,
                 attachments TEXT
@@ -156,6 +156,7 @@ class Database:
                 ("attachments", "TEXT"),
             ],
         )
+        await self._relax_messages_sender_check()
 
     async def _add_missing_columns(
         self, table: str, columns: list[tuple[str, str]]
@@ -167,6 +168,36 @@ class Database:
                 await self.conn.execute(
                     f"ALTER TABLE {table} ADD COLUMN {col} {definition}"
                 )
+
+    async def _relax_messages_sender_check(self) -> None:
+        """Старая схема ограничивала sender только ('user','admin').
+        Теперь нужен ещё 'system' для событий смены статуса. Перестраиваем таблицу."""
+        cur = await self.conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='messages'"
+        )
+        row = await cur.fetchone()
+        if not row:
+            return
+        sql = row["sql"] or ""
+        if "'system'" in sql:
+            return  # уже мигрировано
+        await self.conn.executescript(
+            """
+            CREATE TABLE messages_new (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id   INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+                sender      TEXT NOT NULL CHECK (sender IN ('user','admin','system')),
+                text        TEXT NOT NULL,
+                created_at  TEXT NOT NULL,
+                attachments TEXT
+            );
+            INSERT INTO messages_new(id, ticket_id, sender, text, created_at, attachments)
+                SELECT id, ticket_id, sender, text, created_at, attachments FROM messages;
+            DROP TABLE messages;
+            ALTER TABLE messages_new RENAME TO messages;
+            CREATE INDEX IF NOT EXISTS idx_messages_ticket ON messages(ticket_id);
+            """
+        )
 
 
     async def upsert_user(
@@ -405,7 +436,10 @@ class Database:
                 (status, _now(), ticket_id),
             )
         await self.conn.commit()
-        return cur.rowcount > 0
+        if cur.rowcount > 0:
+            await self.add_status_event(ticket_id, status)
+            return True
+        return False
 
     async def auto_set_review_if_untouched(self, ticket_id: int) -> bool:
         ticket = await self.get_ticket(ticket_id)
@@ -422,6 +456,7 @@ class Database:
             (STATUS_REVIEW, _now(), ticket_id),
         )
         await self.conn.commit()
+        await self.add_status_event(ticket_id, STATUS_REVIEW)
         return True
 
     async def add_message(
@@ -431,8 +466,8 @@ class Database:
         text: str,
         attachments: Optional[str] = None,
     ) -> None:
-        if sender not in ("user", "admin"):
-            raise ValueError("sender должен быть 'user' или 'admin'")
+        if sender not in ("user", "admin", "system"):
+            raise ValueError("sender должен быть 'user', 'admin' или 'system'")
         await self.conn.execute(
             """
             INSERT INTO messages(ticket_id, sender, text, created_at, attachments)
@@ -445,6 +480,11 @@ class Database:
             (_now(), ticket_id),
         )
         await self.conn.commit()
+
+    async def add_status_event(self, ticket_id: int, status: str) -> None:
+        """Записывает в историю системное сообщение о смене статуса."""
+        label = STATUS_LABELS.get(status, status)
+        await self.add_message(ticket_id, "system", f"status:{label}")
 
     async def get_last_messages(self, ticket_id: int, limit: Optional[int] = None) -> list[dict]:
         params: tuple = (ticket_id,)

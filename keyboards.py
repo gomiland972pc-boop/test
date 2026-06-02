@@ -140,7 +140,7 @@ def user_tickets_list(tickets, archived: bool, page: int = 0, total_pages: int =
     rows: list[list[dict]] = []
     for t in tickets:
         from database import STATUS_LABELS
-        label = f"#{t.id} | {_format_ticket_date(t.created_at)} | {STATUS_LABELS.get(t.status, t.status)}"
+        label = f"№{t.id} | {_format_ticket_date(t.created_at)} | {STATUS_LABELS.get(t.status, t.status)}"
         rows.append([_btn(label, f"{CB_TICKET_OPEN}{t.id}")])
     nav: list[dict] = []
     kind = "archive" if archived else "active"
@@ -245,7 +245,7 @@ def admin_test_nick_tickets_list(
     rows: list[list[dict]] = []
     for t in tickets:
         from database import STATUS_LABELS
-        label = f"#{t.id} | {_format_ticket_date(t.created_at)} | {STATUS_LABELS.get(t.status, t.status)}"
+        label = f"№{t.id} | {_format_ticket_date(t.created_at)} | {STATUS_LABELS.get(t.status, t.status)}"
         rows.append([_btn(label, f"{CB_ADMIN_TEST_NICK_SELECT}{t.id}")])
     nav: list[dict] = []
     if page > 0:
@@ -271,7 +271,7 @@ def admin_tickets_list(
     rows: list[list[dict]] = [[_btn("🔄 Обновить список", f"{CB_ADMIN_LIST_REFRESH}{kind}:{page}")]]
     for t in tickets:
         from database import STATUS_LABELS
-        label = f"#{t.id} | {_format_ticket_date(t.created_at)} | {STATUS_LABELS.get(t.status, t.status)}"
+        label = f"№{t.id} | {_format_ticket_date(t.created_at)} | {STATUS_LABELS.get(t.status, t.status)}"
         rows.append([_btn(label, f"{CB_ADMIN_OPEN}{t.id}")])
     nav: list[dict] = []
     if page > 0:
