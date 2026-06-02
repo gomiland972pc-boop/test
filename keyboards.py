@@ -79,7 +79,7 @@ def main_menu(is_admin: bool = False) -> list[dict]:
     rows = [
         [_btn("📖 Инструкции по боту", CB_MENU_INSTRUCTIONS)],
         [_btn("👤 Профиль и каналы", CB_MENU_PROFILE)],
-        [_btn("🆘 Связаться с поддержкой", CB_MENU_SUPPORT)],
+        [_btn("🆘 Связаться с нами", CB_MENU_SUPPORT)],
     ]
     if is_admin:
         rows.append([_btn("🛠 Админ-панель", CB_MENU_ADMIN)])
@@ -233,7 +233,6 @@ def admin_folders(active_count: int = 0, archive_count: int = 0) -> list[dict]:
             [_btn(f"🗄 Архив: {archive_count}", CB_ADMIN_ARCHIVE)],
             [_btn("👥 Пользователи", CB_ADMIN_USERS)],
             [_btn("✍️ Написать пользователю", CB_ADMIN_WRITE_USER)],
-            [_btn("🧪 Тест ника", CB_ADMIN_TEST_NICK)],
             [_btn("🏠 Меню", CB_BACK_MAIN)],
         ]
     )

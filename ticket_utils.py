@@ -60,8 +60,8 @@ def _user_name_md(profile, user_id: int, *, as_link: bool) -> str:
     name = _user_display_name(profile)
     safe = _md_escape(name)
     if as_link:
-        return f"*[{safe}](max://user/{user_id})*"
-    return f"*{safe}*"
+        return f"**[{safe}](max://user/{user_id})**"
+    return f"**{safe}**"
 
 
 def _has_attachments(message: dict) -> bool:
@@ -73,15 +73,14 @@ def _history_line(message: dict, user_name_md: str) -> str:
     sender = message["sender"]
     text = message.get("text") or ""
     if sender == "system":
-        # Системное событие: text закодирован как "status:<label>".
         if text.startswith("status:"):
             label = text.split(":", 1)[1]
-            return f"_🔔 Статус тикета изменился на *{_md_escape(label)}*_"
+            return f"_🔔 Статус тикета изменился на **{_md_escape(label)}**_"
         return f"_{_md_escape(text)}_"
     if sender == "user":
         sender_md = user_name_md
     else:
-        sender_md = f"*{SUPPORT_NAME}*"
+        sender_md = f"**{SUPPORT_NAME}**"
     safe_text = _md_escape(text)
     suffix = " 📎" if _has_attachments(message) else ""
     return f"{sender_md}: {safe_text}{suffix}".rstrip()
@@ -112,15 +111,15 @@ async def _build_history(ctx: BotContext, ticket: Ticket, *, admin_view: bool) -
 
     status_label = STATUS_LABELS.get(ticket.status, ticket.status)
     lines = [
-        f"🎫 *Тикет №{ticket.id}*",
-        f"*От кого:* {from_label}",
-        f"*Кому:* {to_label}",
-        f"*ID:* `{ticket.user_id}`",
-        f"*Статус:* *{_md_escape(status_label)}*",
-        f"*Создан:* {format_ticket_date(ticket.created_at)}",
-        f"*Обновлён:* {format_ticket_date(ticket.updated_at)}",
+        f"🎫 **Тикет №{ticket.id}**",
+        f"**От кого:** {from_label}",
+        f"**Кому:** {to_label}",
+        f"**ID:** `{ticket.user_id}`",
+        f"**Статус:** **{_md_escape(status_label)}**",
+        f"**Создан:** {format_ticket_date(ticket.created_at)}",
+        f"**Обновлён:** {format_ticket_date(ticket.updated_at)}",
         "",
-        "*История:*",
+        "**История:**",
     ]
     if not messages:
         lines.append("_Сообщений пока нет._")
