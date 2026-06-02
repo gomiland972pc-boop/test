@@ -39,6 +39,14 @@ def format_ticket_date(value: str) -> str:
 SUPPORT_NAME = "Служба Поддержки"
 
 
+def _md_escape(s: str) -> str:
+    if not s:
+        return s
+    for ch in ("\\", "*", "_", "`", "[", "]", "(", ")", "~", "#", ">", "+"):
+        s = s.replace(ch, "\\" + ch)
+    return s
+
+
 def _user_display_name(profile) -> str:
     if profile and profile.name:
         return profile.name
@@ -47,16 +55,29 @@ def _user_display_name(profile) -> str:
     return "—"
 
 
+def _user_name_md(profile, user_id: int, *, as_link: bool) -> str:
+    """Имя пользователя в Markdown. Жирным; для админа — ещё и кликабельной ссылкой."""
+    name = _user_display_name(profile)
+    safe = _md_escape(name)
+    if as_link:
+        return f"*[{safe}](max://user/{user_id})*"
+    return f"*{safe}*"
+
+
 def _has_attachments(message: dict) -> bool:
     raw = message.get("attachments")
     return bool(raw) and raw not in ("null", "[]")
 
 
-def _history_line(message: dict, user_name: str) -> str:
-    sender_label = user_name if message["sender"] == "user" else SUPPORT_NAME
+def _history_line(message: dict, user_name_md: str) -> str:
+    if message["sender"] == "user":
+        sender_md = user_name_md
+    else:
+        sender_md = f"*{SUPPORT_NAME}*"
     text = message.get("text") or ""
+    safe_text = _md_escape(text)
     suffix = " 📎" if _has_attachments(message) else ""
-    return f"{sender_label}: {text}{suffix}".rstrip()
+    return f"{sender_md}: {safe_text}{suffix}".rstrip()
 
 
 async def build_ticket_history(ctx: BotContext, ticket: Ticket) -> str:
@@ -70,21 +91,25 @@ async def build_admin_ticket_history(ctx: BotContext, ticket: Ticket) -> str:
 async def _build_history(ctx: BotContext, ticket: Ticket, *, admin_view: bool) -> str:
     messages = await ctx.db.get_last_messages(ticket.id)
     profile = await ctx.db.get_user(ticket.user_id)
-    user_name = _user_display_name(profile)
+
+    # имя пользователя — ссылкой у админа, обычным у пользователя
+    user_md = _user_name_md(profile, ticket.user_id, as_link=admin_view)
+    support_md = f"*{SUPPORT_NAME}*"
 
     if ticket.initiated_by == "support":
-        from_label = SUPPORT_NAME
-        to_label = user_name
+        from_label = support_md
+        to_label = user_md
     else:
-        from_label = user_name
-        to_label = SUPPORT_NAME
+        from_label = user_md
+        to_label = support_md
 
+    status_label = STATUS_LABELS.get(ticket.status, ticket.status)
     lines = [
         f"🎫 *Тикет №{ticket.id}*",
-        f"От кого: *{from_label}*",
-        f"Кому: *{to_label}*",
+        f"От кого: {from_label}",
+        f"Кому: {to_label}",
         f"ID: `{ticket.user_id}`",
-        f"Статус: *{STATUS_LABELS.get(ticket.status, ticket.status)}*",
+        f"Статус: *{_md_escape(status_label)}*",
         f"Создан: {format_ticket_date(ticket.created_at)}",
         f"Обновлён: {format_ticket_date(ticket.updated_at)}",
         "",
@@ -93,7 +118,7 @@ async def _build_history(ctx: BotContext, ticket: Ticket, *, admin_view: bool) -
     if not messages:
         lines.append("_Сообщений пока нет._")
     for message in messages:
-        lines.append(_history_line(message, user_name))
+        lines.append(_history_line(message, user_md))
     return "\n".join(lines)
 
 

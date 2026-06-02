@@ -168,18 +168,28 @@ async def show_users(
         )
         return
 
+    now_utc = datetime.now(timezone.utc)
+    online_window = 15 * 60  # секунд — «онлайн», если заходил в этот интервал
+
     lines: list[str] = []
     for u in users:
-        nick = f"@{u.username}" if u.username else "—"
+        display = u.name or (f"@{u.username}" if u.username else f"id {u.user_id}")
+        safe_display = _md_escape(display)
+        nick_link = f"[{safe_display}](max://user/{u.user_id})"
+
+        seen_raw = u.last_seen_at or u.created_at
         try:
-            dt = datetime.fromisoformat(u.created_at)
+            dt = datetime.fromisoformat(seen_raw)
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
-            dt = dt.astimezone(MSK)
-            date_str = dt.strftime("%d.%m.%Y %H:%M") + " MSK"
+            seconds_ago = (now_utc - dt).total_seconds()
+            online = "🟢 " if 0 <= seconds_ago <= online_window else ""
+            date_str = dt.astimezone(MSK).strftime("%d.%m.%Y %H:%M") + " MSK"
         except (ValueError, TypeError):
-            date_str = u.created_at[:16]
-        lines.append(f"{u.user_id} | {nick} | {date_str}")
+            online = ""
+            date_str = seen_raw[:16] if seen_raw else "—"
+
+        lines.append(f"{online}{nick_link} `id {u.user_id}` — {date_str}")
 
     await ctx.reply_menu(
         user_id=admin_id,

@@ -137,7 +137,11 @@ ADMIN_REPLY_SENT = "📤 Ответ отправлен пользователю 
 USER_ADMIN_REPLY = "💬 *Ответ поддержки по тикету #{ticket_id}:*\n\n{text}"
 
 
-ADMIN_USERS_HEADER = "👥 *Список пользователей:*\n\n{users}"
+ADMIN_USERS_HEADER = (
+    "👥 *Последние пользователи*\n"
+    "🟢 — был активен последние 15 минут\n\n"
+    "{users}"
+)
 ADMIN_USERS_EMPTY = "📭 Зарегистрированных пользователей нет."
 
 ADMIN_ASK_USER_ID = (

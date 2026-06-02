@@ -48,6 +48,7 @@ class UserProfile:
     consent_accepted: bool
     offer_accepted: bool
     created_at: str
+    last_seen_at: Optional[str] = None
 
 
 def _now() -> str:
@@ -138,6 +139,7 @@ class Database:
                 ("premium_expiry", "TEXT"),
                 ("consent_accepted", "INTEGER NOT NULL DEFAULT 0"),
                 ("offer_accepted", "INTEGER NOT NULL DEFAULT 0"),
+                ("last_seen_at", "TEXT"),
             ],
         )
         await self._add_missing_columns(
@@ -174,16 +176,18 @@ class Database:
         username: Optional[str],
         chat_id: Optional[int],
     ) -> None:
+        ts = _now()
         await self.conn.execute(
             """
-            INSERT INTO users(user_id, name, username, chat_id, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO users(user_id, name, username, chat_id, created_at, last_seen_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(user_id) DO UPDATE SET
-                name     = COALESCE(excluded.name, users.name),
-                username = COALESCE(excluded.username, users.username),
-                chat_id  = COALESCE(excluded.chat_id, users.chat_id)
+                name         = COALESCE(excluded.name, users.name),
+                username     = COALESCE(excluded.username, users.username),
+                chat_id      = COALESCE(excluded.chat_id, users.chat_id),
+                last_seen_at = excluded.last_seen_at
             """,
-            (user_id, name, username, chat_id, _now()),
+            (user_id, name, username, chat_id, ts, ts),
         )
         await self.conn.commit()
 
@@ -199,6 +203,14 @@ class Database:
         d["consent_accepted"] = bool(d.get("consent_accepted", 0))
         d["offer_accepted"] = bool(d.get("offer_accepted", 0))
         return UserProfile(**d)
+
+    async def touch_user_seen(self, user_id: int) -> None:
+        """Обновить отметку «последнего захода» для уже существующего пользователя."""
+        await self.conn.execute(
+            "UPDATE users SET last_seen_at = ? WHERE user_id = ?",
+            (_now(), user_id),
+        )
+        await self.conn.commit()
 
     async def get_user_chat_id(self, user_id: int) -> Optional[int]:
         cur = await self.conn.execute(
@@ -454,7 +466,11 @@ class Database:
 
     async def list_users(self, limit: int = 50, offset: int = 0) -> list[UserProfile]:
         cur = await self.conn.execute(
-            "SELECT * FROM users ORDER BY created_at ASC LIMIT ? OFFSET ?",
+            """
+            SELECT * FROM users
+            ORDER BY COALESCE(last_seen_at, created_at) DESC
+            LIMIT ? OFFSET ?
+            """,
             (limit, offset),
         )
         rows = await cur.fetchall()
