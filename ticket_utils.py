@@ -56,9 +56,12 @@ def _user_display_name(profile) -> str:
 
 
 def _user_name_md(profile, user_id: int, *, as_link: bool) -> str:
-    """Имя пользователя в Markdown — всегда жирным, без ссылки."""
+    """Имя пользователя жирным. У админа — ещё и кликабельной ссылкой на профиль."""
     name = _user_display_name(profile)
-    return f"*{_md_escape(name)}*"
+    safe = _md_escape(name)
+    if as_link:
+        return f"*[{safe}](max://user/{user_id})*"
+    return f"*{safe}*"
 
 
 def _has_attachments(message: dict) -> bool:
