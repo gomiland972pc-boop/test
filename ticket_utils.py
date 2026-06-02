@@ -110,14 +110,14 @@ async def _build_history(ctx: BotContext, ticket: Ticket, *, admin_view: bool) -
     status_label = STATUS_LABELS.get(ticket.status, ticket.status)
     lines = [
         f"🎫 *Тикет №{ticket.id}*",
-        f"От кого: {from_label}",
-        f"Кому: {to_label}",
-        f"ID: `{ticket.user_id}`",
-        f"Статус: *{_md_escape(status_label)}*",
-        f"Создан: {format_ticket_date(ticket.created_at)}",
-        f"Обновлён: {format_ticket_date(ticket.updated_at)}",
+        f"*От кого:* {from_label}",
+        f"*Кому:* {to_label}",
+        f"*ID:* `{ticket.user_id}`",
+        f"*Статус:* *{_md_escape(status_label)}*",
+        f"*Создан:* {format_ticket_date(ticket.created_at)}",
+        f"*Обновлён:* {format_ticket_date(ticket.updated_at)}",
         "",
-        "_История:_",
+        "*История:*",
     ]
     if not messages:
         lines.append("_Сообщений пока нет._")
