@@ -69,14 +69,13 @@ def _has_attachments(message: dict) -> bool:
     return bool(raw) and raw not in ("null", "[]")
 
 
-def _history_line(message: dict, user_name_md: str) -> str:
+def _history_line(message: dict, user_name_md: str) -> str | None:
     sender = message["sender"]
     text = message.get("text") or ""
     if sender == "system":
-        if text.startswith("status:"):
-            label = text.split(":", 1)[1]
-            return f"_🔔 Статус тикета изменился на **{_md_escape(label)}**_"
-        return f"_{_md_escape(text)}_"
+        # системные события (смена статуса) — статус всегда виден в шапке,
+        # поэтому в истории их не показываем
+        return None
     if sender == "user":
         sender_md = user_name_md
     else:
@@ -112,19 +111,21 @@ async def _build_history(ctx: BotContext, ticket: Ticket, *, admin_view: bool) -
     status_label = STATUS_LABELS.get(ticket.status, ticket.status)
     lines = [
         f"🎫 **Тикет №{ticket.id}**",
-        f"**От кого:** {from_label}",
-        f"**Кому:** {to_label}",
-        f"**ID:** `{ticket.user_id}`",
-        f"**Статус:** **{_md_escape(status_label)}**",
-        f"**Создан:** {format_ticket_date(ticket.created_at)}",
-        f"**Обновлён:** {format_ticket_date(ticket.updated_at)}",
+        f"👤 **От кого:** {from_label}",
+        f"📨 **Кому:** {to_label}",
+        f"🆔 **ID:** `{ticket.user_id}`",
+        f"📅 **Создан:** {format_ticket_date(ticket.created_at)}",
+        f"🔄 **Обновлён:** {format_ticket_date(ticket.updated_at)}",
+        f"🔖 **Статус:** **{_md_escape(status_label)}**",
         "",
-        "**История:**",
+        "💬 **История:**",
     ]
     if not messages:
         lines.append("_Сообщений пока нет._")
     for message in messages:
-        lines.append(_history_line(message, user_md))
+        line = _history_line(message, user_md)
+        if line is not None:
+            lines.append(line)
     return "\n".join(lines)
 
 
