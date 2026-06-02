@@ -107,7 +107,6 @@ def _build_web_app(ctx: BotContext) -> web.Application:
     app["ctx"] = ctx
     app.router.add_post(ctx.cfg.webhook_path, _handle_webhook)
     app.router.add_get(ctx.cfg.webhook_path, _handle_webhook_warmup)
-    app.router.add_head(ctx.cfg.webhook_path, _handle_webhook_warmup)
     app.router.add_get("/healthz", _handle_health)
     return app
 
