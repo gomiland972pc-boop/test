@@ -227,10 +227,7 @@ def _history_block(message: dict, user_name_md: str) -> str | None:
     body = f"{sender_md}: {formatted}{suffix}".rstrip()
     if not time_str:
         return body
-    # Двойной перенос — markdown-разрыв абзаца, чтобы дата гарантированно
-    # шла отдельной строкой. Курсив — визуальное отделение даже если
-    # рендер схлопнет переносы.
-    return f"_{time_str}_\n\n{body}"
+    return f"{time_str}\n{body}"
 
 
 async def build_ticket_history(ctx: BotContext, ticket: Ticket) -> str:
