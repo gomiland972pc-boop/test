@@ -312,14 +312,10 @@ def admin_ticket_controls(ticket_id: int) -> list[dict]:
 
 def admin_ticket_controls_rows(ticket_id: int) -> list[list[dict]]:
     return [
-        [
-            _btn("🔎 На рассмотрении", f"{CB_ADMIN_STATUS}{ticket_id}:{STATUS_REVIEW}"),
-            _btn("🧑‍💻 Изучает специалист", f"{CB_ADMIN_STATUS}{ticket_id}:{STATUS_SPECIALIST}"),
-        ],
-        [
-            _btn("✍️ Готовится ответ", f"{CB_ADMIN_STATUS}{ticket_id}:{STATUS_PREPARING}"),
-            _btn("🔁 Передан в другой отдел", f"{CB_ADMIN_STATUS}{ticket_id}:{STATUS_TRANSFERRED}"),
-        ],
+        [_btn("🔎 На рассмотрении", f"{CB_ADMIN_STATUS}{ticket_id}:{STATUS_REVIEW}")],
+        [_btn("🧑‍💻 Изучает специалист", f"{CB_ADMIN_STATUS}{ticket_id}:{STATUS_SPECIALIST}")],
+        [_btn("✍️ Готовится ответ", f"{CB_ADMIN_STATUS}{ticket_id}:{STATUS_PREPARING}")],
+        [_btn("🔁 Передан в другой отдел", f"{CB_ADMIN_STATUS}{ticket_id}:{STATUS_TRANSFERRED}")],
         [_btn("✅ Закрыто", f"{CB_ADMIN_STATUS}{ticket_id}:{STATUS_CLOSED}")],
         [_btn("💬 Ответить пользователю", f"{CB_ADMIN_REPLY}{ticket_id}")],
         [_btn("⬅️ К списку", CB_ADMIN_BACK)],
