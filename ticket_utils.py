@@ -45,22 +45,27 @@ async def relay_attachments_now(
     """Прямо сейчас пересылает входящие вложения адресату.
     Скачиваем и заново загружаем через /uploads (иначе Max отказывает,
     т.к. чужие payload медиа имеют короткий срок жизни)."""
+    import logging
+    _log = logging.getLogger(__name__)
     if not attachments:
         return
     try:
         reuploaded = await ctx.api.reupload_attachments(attachments)
-    except Exception:
+    except Exception as exc:
+        _log.exception("RELAY reupload threw: %s", exc)
         reuploaded = []
     if not reuploaded:
+        _log.warning("RELAY ничего не пересылаем (reuploaded пустой). target=%s", target_user_id)
         return
     try:
-        await ctx.api.send_message(
+        resp = await ctx.api.send_message(
             user_id=target_user_id,
             text="",
             attachments=reuploaded,
         )
-    except Exception:
-        pass
+        _log.info("RELAY send_message resp=%s", resp)
+    except Exception as exc:
+        _log.exception("RELAY send_message failed: %s", exc)
 
 
 def _md_escape(s: str) -> str:

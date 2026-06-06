@@ -225,6 +225,9 @@ class MaxBotApi:
         """
         if not attachments:
             return []
+        # Полный лог входящей структуры — чтобы видеть, какие поля
+        # реально присылает Max (особенно для видео).
+        logger.info("RELAY incoming attachments: %s", attachments)
         result: list[dict] = []
         for att in attachments:
             if not isinstance(att, dict):
@@ -241,17 +244,24 @@ class MaxBotApi:
                 or payload.get("file_url")
                 or payload.get("media_url")
             )
+            logger.info(
+                "RELAY att type=%s payload_keys=%s url_found=%s token_found=%s",
+                att_type, list(payload.keys()), bool(url), bool(payload.get("token")),
+            )
             if not url:
                 # Видео/аудио иногда приходят без url, но есть token —
                 # пробуем переслать его напрямую (Max принимает token).
                 token = payload.get("token")
                 if token:
-                    result.append({"type": att_type, "payload": {"token": token}})
+                    forwarded = {"type": att_type, "payload": {"token": token}}
+                    logger.info("RELAY forwarding by token: %s", forwarded)
+                    result.append(forwarded)
                     continue
-                logger.warning("Вложение без url, пропуск: %s", att)
+                logger.warning("Вложение без url и token, пропуск: %s", att)
                 continue
             try:
                 reuploaded = await self._reupload_one(att_type or "file", url)
+                logger.info("RELAY reuploaded ok: %s", reuploaded)
                 result.append(reuploaded)
             except Exception as exc:
                 logger.exception("Не удалось перезалить вложение %s: %s", att_type, exc)
@@ -259,7 +269,10 @@ class MaxBotApi:
                 # попробуем fallback по token, если он есть.
                 token = payload.get("token")
                 if token:
-                    result.append({"type": att_type, "payload": {"token": token}})
+                    forwarded = {"type": att_type, "payload": {"token": token}}
+                    logger.info("RELAY fallback by token: %s", forwarded)
+                    result.append(forwarded)
+        logger.info("RELAY final outgoing attachments: %s", result)
         return result
 
     async def _reupload_one(self, att_type: str, source_url: str) -> dict:
