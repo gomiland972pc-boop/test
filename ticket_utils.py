@@ -36,6 +36,18 @@ def format_ticket_date(value: str) -> str:
         return value
 
 
+def format_message_time(value: str) -> str:
+    """HH:MM DD.MM.YYYY в МСК — для строк истории сообщений."""
+    try:
+        dt = datetime.fromisoformat(value)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.astimezone(timezone(timedelta(hours=3)))
+        return dt.strftime("%H:%M %d.%m.%Y")
+    except (ValueError, TypeError):
+        return value
+
+
 SUPPORT_NAME = "Служба Поддержки"
 
 
@@ -197,7 +209,7 @@ def _has_attachments(message: dict) -> bool:
     return bool(raw) and raw not in ("null", "[]")
 
 
-def _history_line(message: dict, user_name_md: str) -> str | None:
+def _history_block(message: dict, user_name_md: str) -> str | None:
     sender = message["sender"]
     text = message.get("text") or ""
     if sender == "system":
@@ -211,7 +223,14 @@ def _history_line(message: dict, user_name_md: str) -> str | None:
     markup = _parse_markup_raw(message.get("markup"))
     formatted = format_with_markup(text, markup)
     suffix = " 📎" if _has_attachments(message) else ""
-    return f"{sender_md}: {formatted}{suffix}".rstrip()
+    time_str = format_message_time(message.get("created_at") or "")
+    body = f"{sender_md}: {formatted}{suffix}".rstrip()
+    if not time_str:
+        return body
+    # Двойной перенос — markdown-разрыв абзаца, чтобы дата гарантированно
+    # шла отдельной строкой. Курсив — визуальное отделение даже если
+    # рендер схлопнет переносы.
+    return f"_{time_str}_\n\n{body}"
 
 
 async def build_ticket_history(ctx: BotContext, ticket: Ticket) -> str:
@@ -238,7 +257,7 @@ async def _build_history(ctx: BotContext, ticket: Ticket, *, admin_view: bool) -
         to_label = support_md
 
     status_label = STATUS_LABELS.get(ticket.status, ticket.status)
-    lines = [
+    header = [
         f"🎫 **Тикет №{ticket.id}**",
         f"👤 **От кого:** {from_label}",
         f"📨 **Кому:** {to_label}",
@@ -250,13 +269,14 @@ async def _build_history(ctx: BotContext, ticket: Ticket, *, admin_view: bool) -
         "",
         "💬 **История:**",
     ]
-    if not messages:
-        lines.append("_Сообщений пока нет._")
+    blocks: list[str] = []
     for message in messages:
-        line = _history_line(message, user_md)
-        if line is not None:
-            lines.append(line)
-    return "\n".join(lines)
+        block = _history_block(message, user_md)
+        if block is not None:
+            blocks.append(block)
+    if not blocks:
+        blocks.append("_Сообщений пока нет._")
+    return "\n".join(header) + "\n\n" + "\n\n".join(blocks)
 
 
 async def send_ticket_history(
