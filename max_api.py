@@ -238,6 +238,19 @@ class MaxBotApi:
             if att_type in ("inline_keyboard", "link", "callback", "share"):
                 result.append(att)
                 continue
+            # Видео и аудио: /uploads работает асинхронно и возвращает
+            # «<retval>1</retval>» вместо token. Max при отправке требует
+            # именно token в payload — а его нам уже прислали во входящем
+            # вложении. Пересылаем по token напрямую, без reupload.
+            if att_type in ("video", "audio", "voice"):
+                token = payload.get("token")
+                if token:
+                    forwarded = {"type": att_type, "payload": {"token": token}}
+                    logger.info("RELAY forwarding %s by token", att_type)
+                    result.append(forwarded)
+                    continue
+                logger.warning("Видео/аудио без token, пропуск: %s", att)
+                continue
             url = (
                 payload.get("url")
                 or payload.get("download_url")
