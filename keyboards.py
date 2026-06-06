@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 import texts
-from database import STATUS_CLOSED, STATUS_REVIEW, STATUS_SPECIALIST, STATUS_PREPARING
+from database import (
+    STATUS_CLOSED,
+    STATUS_PREPARING,
+    STATUS_REVIEW,
+    STATUS_SPECIALIST,
+    STATUS_TRANSFERRED,
+)
 
 
 CB_ACCEPT_DOCS = "docs:accept"
@@ -312,8 +318,9 @@ def admin_ticket_controls_rows(ticket_id: int) -> list[list[dict]]:
         ],
         [
             _btn("✍️ Готовится ответ", f"{CB_ADMIN_STATUS}{ticket_id}:{STATUS_PREPARING}"),
-            _btn("✅ Закрыто", f"{CB_ADMIN_STATUS}{ticket_id}:{STATUS_CLOSED}"),
+            _btn("🔁 Передан в другой отдел", f"{CB_ADMIN_STATUS}{ticket_id}:{STATUS_TRANSFERRED}"),
         ],
+        [_btn("✅ Закрыто", f"{CB_ADMIN_STATUS}{ticket_id}:{STATUS_CLOSED}")],
         [_btn("💬 Ответить пользователю", f"{CB_ADMIN_REPLY}{ticket_id}")],
         [_btn("⬅️ К списку", CB_ADMIN_BACK)],
         [_btn("🏠 Меню", CB_BACK_MAIN)],

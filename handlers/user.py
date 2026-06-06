@@ -9,7 +9,12 @@ import texts
 from database import STATUS_LABELS
 from handlers.context import BotContext
 from states import State
-from ticket_utils import relay_attachments_now, send_ticket_history, user_ticket_back_keyboard
+from ticket_utils import (
+    format_with_markup,
+    relay_attachments_now,
+    send_ticket_history,
+    user_ticket_back_keyboard,
+)
 
 
 def _dump_attachments(attachments: Optional[list[dict]]) -> Optional[str]:
@@ -17,6 +22,15 @@ def _dump_attachments(attachments: Optional[list[dict]]) -> Optional[str]:
         return None
     try:
         return json.dumps(attachments, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return None
+
+
+def _dump_markup(markup: Optional[list[dict]]) -> Optional[str]:
+    if not markup:
+        return None
+    try:
+        return json.dumps(markup, ensure_ascii=False)
     except (TypeError, ValueError):
         return None
 
@@ -260,12 +274,14 @@ async def create_ticket(
     user_name: str,
     text: str,
     attachments: Optional[list[dict]] = None,
+    markup: Optional[list[dict]] = None,
 ) -> None:
     subject = text or "📎 (вложение)"
     ticket_id = await ctx.db.create_ticket(
         user_id=user_id,
         subject=subject,
         attachments=_dump_attachments(attachments),
+        markup=_dump_markup(markup),
     )
     ctx.states.set(user_id, State.MAIN_MENU)
     await ctx.db.auto_set_review_if_untouched(ticket_id)
@@ -295,6 +311,7 @@ async def create_ticket(
             fmt="markdown",
         )
 
+    subject_md = format_with_markup(subject, markup)
     for admin_id in ctx.cfg.admin_ids:
         try:
             await relay_attachments_now(ctx, admin_id, attachments)
@@ -304,7 +321,7 @@ async def create_ticket(
                     ticket_id=ticket_id,
                     user_name=user_name or "Пользователь",
                     user_id=user_id,
-                    subject=subject,
+                    subject=subject_md,
                 ),
                 attachments=kb.admin_new_ticket(ticket_id),
                 fmt="markdown",
@@ -319,6 +336,7 @@ async def reply_to_ticket(
     text: str,
     ticket_id: int,
     attachments: Optional[list[dict]] = None,
+    markup: Optional[list[dict]] = None,
 ) -> None:
     ticket = await ctx.db.get_ticket(ticket_id)
     if ticket is None or ticket.user_id != user_id:
@@ -326,7 +344,9 @@ async def reply_to_ticket(
         await ctx.api.send_message(user_id=user_id, text="Тикет не найден.")
         return
     await ctx.db.add_message(
-        ticket.id, "user", text, attachments=_dump_attachments(attachments)
+        ticket.id, "user", text,
+        attachments=_dump_attachments(attachments),
+        markup=_dump_markup(markup),
     )
     ctx.states.set(user_id, State.MAIN_MENU)
     status_changed = await ctx.db.auto_set_review_if_untouched(ticket.id)
@@ -348,6 +368,7 @@ async def reply_to_ticket(
         updated or ticket,
         attachments=user_ticket_back_keyboard(updated or ticket),
     )
+    text_md = format_with_markup(text, markup)
     for admin_id in ctx.cfg.admin_ids:
         try:
             await relay_attachments_now(ctx, admin_id, attachments)
@@ -356,7 +377,7 @@ async def reply_to_ticket(
                 text=(
                     f"💬 *Сообщение по тикету №{ticket.id}* "
                     f"(статус: {STATUS_LABELS.get(ticket.status, ticket.status)})\n\n"
-                    f"👤 {user_name} (id {user_id}): {text}"
+                    f"👤 {user_name} (id {user_id}): {text_md}"
                 ),
                 attachments=kb.admin_new_ticket(ticket.id),
                 fmt="markdown",
@@ -370,12 +391,15 @@ async def append_to_open_ticket(
     user_id: int,
     text: str,
     attachments: Optional[list[dict]] = None,
+    markup: Optional[list[dict]] = None,
 ) -> bool:
     ticket = await ctx.db.find_open_ticket_by_user(user_id)
     if ticket is None:
         return False
     await ctx.db.add_message(
-        ticket.id, "user", text, attachments=_dump_attachments(attachments)
+        ticket.id, "user", text,
+        attachments=_dump_attachments(attachments),
+        markup=_dump_markup(markup),
     )
     status_changed = await ctx.db.auto_set_review_if_untouched(ticket.id)
     if status_changed:
@@ -389,6 +413,7 @@ async def append_to_open_ticket(
             logger.exception("Не удалось отправить авто-статус: %s", exc)
     profile = await ctx.db.get_user(user_id)
     user_name = profile.name if profile and profile.name else "—"
+    text_md = format_with_markup(text, markup)
     for admin_id in ctx.cfg.admin_ids:
         try:
             await relay_attachments_now(ctx, admin_id, attachments)
@@ -397,7 +422,7 @@ async def append_to_open_ticket(
                 text=(
                     f"💬 *Сообщение по тикету №{ticket.id}* "
                     f"(статус: {STATUS_LABELS.get(ticket.status, ticket.status)})\n\n"
-                    f"👤 {user_name} (id {user_id}): {text}"
+                    f"👤 {user_name} (id {user_id}): {text_md}"
                 ),
                 attachments=kb.admin_new_ticket(ticket.id),
                 fmt="markdown",

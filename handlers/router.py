@@ -63,6 +63,14 @@ def _extract_attachments(msg: dict) -> Optional[list[dict]]:
     return None
 
 
+def _extract_markup(msg: dict) -> Optional[list[dict]]:
+    body = msg.get("body") or {}
+    markup = body.get("markup") or msg.get("markup")
+    if isinstance(markup, list) and markup:
+        return [m for m in markup if isinstance(m, dict)]
+    return None
+
+
 def _extract_user_id(obj: dict) -> Optional[int]:
     for key in ("user_id", "id"):
         v = obj.get(key)
@@ -131,6 +139,7 @@ async def _handle_message(ctx: BotContext, update: dict) -> None:
     chat_id = _extract_chat_id(recipient)
     text = _extract_text(msg)
     attachments = _extract_attachments(msg)
+    markup = _extract_markup(msg)
 
     if user_id is None:
         user_id = update.get("user_id") or update.get("chat_id")
@@ -166,7 +175,8 @@ async def _handle_message(ctx: BotContext, update: dict) -> None:
         ticket_id = int(data.get("ticket_id", 0))
         if ticket_id:
             await admin_h.send_reply(
-                ctx, user_id, ticket_id, text, attachments=attachments
+                ctx, user_id, ticket_id, text,
+                attachments=attachments, markup=markup,
             )
             return
 
@@ -178,7 +188,8 @@ async def _handle_message(ctx: BotContext, update: dict) -> None:
         target_user_id = int(data.get("target_user_id", 0))
         if target_user_id:
             await admin_h.send_first_message(
-                ctx, user_id, target_user_id, text, attachments=attachments
+                ctx, user_id, target_user_id, text,
+                attachments=attachments, markup=markup,
             )
         else:
             ctx.states.reset(user_id)
@@ -188,17 +199,19 @@ async def _handle_message(ctx: BotContext, update: dict) -> None:
         ticket_id = int(data.get("ticket_id", 0))
         if ticket_id:
             await user_h.reply_to_ticket(
-                ctx, user_id, text, ticket_id, attachments=attachments
+                ctx, user_id, text, ticket_id,
+                attachments=attachments, markup=markup,
             )
         else:
             await user_h.create_ticket(
-                ctx, user_id, user_name, text, attachments=attachments
+                ctx, user_id, user_name, text,
+                attachments=attachments, markup=markup,
             )
         return
 
     if user_id not in ctx.cfg.admin_ids:
         if await user_h.append_to_open_ticket(
-            ctx, user_id, text, attachments=attachments
+            ctx, user_id, text, attachments=attachments, markup=markup,
         ):
             return
 

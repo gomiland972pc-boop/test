@@ -71,6 +71,105 @@ def _md_escape(s: str) -> str:
     return s
 
 
+_FMT_WRAP = {
+    "strong": ("**", "**"),
+    "bold": ("**", "**"),
+    "emphasized": ("*", "*"),
+    "italic": ("*", "*"),
+    "underline": ("__", "__"),
+    "strikethrough": ("~~", "~~"),
+    "monospaced": ("`", "`"),
+    "code": ("`", "`"),
+}
+
+
+def format_with_markup(text: str, markup: list[dict] | None) -> str:
+    """Преобразует входящий текст с разметкой Max в Markdown-строку.
+    Использует markup-аннотации (from/length/type/url) — поддерживает
+    жирный, курсив, подчёрк, зачёркивание, моно, ссылку, цитату, код.
+    Перекрывающиеся аннотации не вкладываются: берётся первая по позиции,
+    последующие пересекающиеся — пропускаются.
+    """
+    if not text:
+        return ""
+    if not markup:
+        return _md_escape(text)
+
+    n = len(text)
+    spans: list[tuple[int, int, str, str | None]] = []
+    for m in markup:
+        if not isinstance(m, dict):
+            continue
+        try:
+            start = max(0, int(m.get("from", 0)))
+            length = int(m.get("length", 0))
+        except (TypeError, ValueError):
+            continue
+        mtype = (m.get("type") or "").lower()
+        end = min(n, start + length)
+        if start >= end:
+            continue
+        url = m.get("url") if isinstance(m.get("url"), str) else None
+        spans.append((start, end, mtype, url))
+
+    if not spans:
+        return _md_escape(text)
+
+    # выбираем непересекающиеся в порядке слева-направо (длинные приоритетнее
+    # на одной точке старта).
+    spans.sort(key=lambda s: (s[0], -s[1]))
+    chosen: list[tuple[int, int, str, str | None]] = []
+    last_end = 0
+    for s in spans:
+        if s[0] >= last_end:
+            chosen.append(s)
+            last_end = s[1]
+
+    out: list[str] = []
+    pos = 0
+    for start, end, mtype, url in chosen:
+        if pos < start:
+            out.append(_md_escape(text[pos:start]))
+        segment = _md_escape(text[start:end])
+        out.append(_wrap_segment(segment, mtype, url, raw_segment=text[start:end]))
+        pos = end
+    if pos < n:
+        out.append(_md_escape(text[pos:]))
+    return "".join(out)
+
+
+def _wrap_segment(escaped: str, mtype: str, url: str | None, raw_segment: str) -> str:
+    if mtype in _FMT_WRAP:
+        open_md, close_md = _FMT_WRAP[mtype]
+        return f"{open_md}{escaped}{close_md}"
+    if mtype == "link":
+        href = url or raw_segment
+        return f"[{escaped}]({href})"
+    if mtype == "quote":
+        # цитата как блочный префикс перед каждой строкой
+        return "\n".join("> " + part for part in escaped.split("\n"))
+    if mtype == "pre":
+        # многострочный код
+        return f"```\n{raw_segment}\n```"
+    return escaped
+
+
+def _parse_markup_raw(raw) -> list[dict] | None:
+    if not raw or raw in ("null", "[]"):
+        return None
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, str):
+        import json as _json
+        try:
+            data = _json.loads(raw)
+        except (ValueError, TypeError):
+            return None
+        if isinstance(data, list):
+            return data
+    return None
+
+
 def _user_display_name(profile) -> str:
     if profile and profile.name:
         return profile.name
@@ -104,9 +203,10 @@ def _history_line(message: dict, user_name_md: str) -> str | None:
         sender_md = user_name_md
     else:
         sender_md = f"**{SUPPORT_NAME}**"
-    safe_text = _md_escape(text)
+    markup = _parse_markup_raw(message.get("markup"))
+    formatted = format_with_markup(text, markup)
     suffix = " 📎" if _has_attachments(message) else ""
-    return f"{sender_md}: {safe_text}{suffix}".rstrip()
+    return f"{sender_md}: {formatted}{suffix}".rstrip()
 
 
 async def build_ticket_history(ctx: BotContext, ticket: Ticket) -> str:

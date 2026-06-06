@@ -13,6 +13,7 @@ STATUS_OPEN = "open"
 STATUS_REVIEW = "review"
 STATUS_SPECIALIST = "specialist"
 STATUS_PREPARING = "preparing"
+STATUS_TRANSFERRED = "transferred"
 STATUS_CLOSED = "closed"
 
 STATUS_LABELS = {
@@ -20,6 +21,7 @@ STATUS_LABELS = {
     STATUS_REVIEW: "На рассмотрении",
     STATUS_SPECIALIST: "Изучает специалист",
     STATUS_PREPARING: "Готовится ответ",
+    STATUS_TRANSFERRED: "Передан в другой отдел",
     STATUS_CLOSED: "Закрыт",
 }
 
@@ -148,7 +150,8 @@ class Database:
                     sender      TEXT NOT NULL CHECK (sender IN ('user','admin','system')),
                     text        TEXT NOT NULL,
                     created_at  TEXT NOT NULL,
-                    attachments TEXT
+                    attachments TEXT,
+                    markup      TEXT
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_messages_ticket ON messages(ticket_id);
@@ -182,6 +185,7 @@ class Database:
             "messages",
             [
                 ("attachments", "TEXT"),
+                ("markup", "TEXT"),
             ],
         )
 
@@ -276,6 +280,7 @@ class Database:
         initiated_by: str = "user",
         first_sender: str = "user",
         attachments: Optional[str] = None,
+        markup: Optional[str] = None,
     ) -> int:
         if initiated_by not in ("user", "support"):
             raise ValueError("initiated_by должен быть 'user' или 'support'")
@@ -297,10 +302,10 @@ class Database:
                 )
                 await conn.execute(
                     """
-                    INSERT INTO messages(ticket_id, sender, text, created_at, attachments)
-                    VALUES ($1, $2, $3, $4, $5)
+                    INSERT INTO messages(ticket_id, sender, text, created_at, attachments, markup)
+                    VALUES ($1, $2, $3, $4, $5, $6)
                     """,
-                    ticket_id, first_sender, subject, ts, attachments,
+                    ticket_id, first_sender, subject, ts, attachments, markup,
                 )
         return int(ticket_id)
 
@@ -456,6 +461,7 @@ class Database:
         sender: str,
         text: str,
         attachments: Optional[str] = None,
+        markup: Optional[str] = None,
     ) -> None:
         if sender not in ("user", "admin", "system"):
             raise ValueError("sender должен быть 'user', 'admin' или 'system'")
@@ -464,10 +470,10 @@ class Database:
             async with conn.transaction():
                 await conn.execute(
                     """
-                    INSERT INTO messages(ticket_id, sender, text, created_at, attachments)
-                    VALUES ($1, $2, $3, $4, $5)
+                    INSERT INTO messages(ticket_id, sender, text, created_at, attachments, markup)
+                    VALUES ($1, $2, $3, $4, $5, $6)
                     """,
-                    ticket_id, sender, text, ts, attachments,
+                    ticket_id, sender, text, ts, attachments, markup,
                 )
                 await conn.execute(
                     "UPDATE tickets SET updated_at = $1 WHERE id = $2",
@@ -483,7 +489,7 @@ class Database:
         if limit is not None:
             rows = await self.pool.fetch(
                 """
-                SELECT sender, text, created_at, attachments FROM messages
+                SELECT sender, text, created_at, attachments, markup FROM messages
                 WHERE ticket_id = $1
                 ORDER BY id ASC
                 LIMIT $2
@@ -493,7 +499,7 @@ class Database:
         else:
             rows = await self.pool.fetch(
                 """
-                SELECT sender, text, created_at, attachments FROM messages
+                SELECT sender, text, created_at, attachments, markup FROM messages
                 WHERE ticket_id = $1
                 ORDER BY id ASC
                 """,

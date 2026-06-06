@@ -221,6 +221,7 @@ class MaxBotApi:
         переслать в другой чат. Max не разрешает переиспользовать чужие
         payload — поэтому скачиваем и грузим заново.
         Кнопки/ссылки (inline_keyboard, link, callback) пропускаются без изменений.
+        Для видео url часто отсутствует — пробуем переслать по token.
         """
         if not attachments:
             return []
@@ -238,8 +239,15 @@ class MaxBotApi:
                 payload.get("url")
                 or payload.get("download_url")
                 or payload.get("file_url")
+                or payload.get("media_url")
             )
             if not url:
+                # Видео/аудио иногда приходят без url, но есть token —
+                # пробуем переслать его напрямую (Max принимает token).
+                token = payload.get("token")
+                if token:
+                    result.append({"type": att_type, "payload": {"token": token}})
+                    continue
                 logger.warning("Вложение без url, пропуск: %s", att)
                 continue
             try:
@@ -247,6 +255,11 @@ class MaxBotApi:
                 result.append(reuploaded)
             except Exception as exc:
                 logger.exception("Не удалось перезалить вложение %s: %s", att_type, exc)
+                # Если перезалить не удалось (например, большое видео) —
+                # попробуем fallback по token, если он есть.
+                token = payload.get("token")
+                if token:
+                    result.append({"type": att_type, "payload": {"token": token}})
         return result
 
     async def _reupload_one(self, att_type: str, source_url: str) -> dict:

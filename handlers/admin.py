@@ -11,7 +11,11 @@ import texts
 from database import STATUS_LABELS
 from handlers.context import BotContext
 from states import State
-from ticket_utils import relay_attachments_now, send_ticket_history
+from ticket_utils import (
+    format_with_markup,
+    relay_attachments_now,
+    send_ticket_history,
+)
 
 
 def _dump_attachments(attachments: Optional[list[dict]]) -> Optional[str]:
@@ -19,6 +23,15 @@ def _dump_attachments(attachments: Optional[list[dict]]) -> Optional[str]:
         return None
     try:
         return json.dumps(attachments, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return None
+
+
+def _dump_markup(markup: Optional[list[dict]]) -> Optional[str]:
+    if not markup:
+        return None
+    try:
+        return json.dumps(markup, ensure_ascii=False)
     except (TypeError, ValueError):
         return None
 
@@ -408,6 +421,7 @@ async def send_first_message(
     target_user_id: int,
     text: str,
     attachments: Optional[list[dict]] = None,
+    markup: Optional[list[dict]] = None,
 ) -> None:
     if not _is_admin(ctx, admin_id):
         ctx.states.reset(admin_id)
@@ -429,6 +443,7 @@ async def send_first_message(
         initiated_by="support",
         first_sender="admin",
         attachments=_dump_attachments(attachments),
+        markup=_dump_markup(markup),
     )
     ctx.states.set(admin_id, State.MAIN_MENU)
 
@@ -475,6 +490,7 @@ async def send_reply(
     ticket_id: int,
     text: str,
     attachments: Optional[list[dict]] = None,
+    markup: Optional[list[dict]] = None,
 ) -> None:
     if not _is_admin(ctx, admin_id):
         await ctx.api.send_message(user_id=admin_id, text=texts.NOT_ADMIN)
@@ -491,15 +507,18 @@ async def send_reply(
 
     reply_text = text or "📎"
     await ctx.db.add_message(
-        ticket_id, "admin", reply_text, attachments=_dump_attachments(attachments)
+        ticket_id, "admin", reply_text,
+        attachments=_dump_attachments(attachments),
+        markup=_dump_markup(markup),
     )
     ctx.states.set(admin_id, State.MAIN_MENU)
 
+    reply_md = format_with_markup(reply_text, markup) if text else reply_text
     try:
         await relay_attachments_now(ctx, ticket.user_id, attachments)
         await ctx.api.send_message(
             user_id=ticket.user_id,
-            text=texts.USER_ADMIN_REPLY.format(ticket_id=ticket_id, text=reply_text),
+            text=texts.USER_ADMIN_REPLY.format(ticket_id=ticket_id, text=reply_md),
             fmt="markdown",
         )
     except Exception as exc:
